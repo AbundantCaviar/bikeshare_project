@@ -1,0 +1,5 @@
+data,metric,value
+train,accuracy,0.7925237302723981
+train,AUC,0.8917801357250597
+test,accuracy,0.7149337756079329
+test,AUC,0.7475231236534652
