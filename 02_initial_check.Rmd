@@ -1,0 +1,177 @@
+---
+title: "Initial Cleaning and Transformation"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+source("00_libraries.r")
+```
+
+### Initial checking and data transformation
+
+We want to start by checking data integrity, e.g. whether columns are of the right 
+type, missing values, naming consistency for categorical variables, and so on.  I created
+a script of helper functions which will be useful throughout this analysis, so we start
+by sourcing these.
+
+```{r, echo = FALSE, message = FALSE}
+source("helper_functions.r")
+```
+
+Note that the dataset may take ~ 30 seconds to load, therefore we only load it if 
+it's not already in the workspace.
+
+```{r reading}
+tictoc::tic()
+if (exists("combined_data_raw")) bikes_raw <- combined_data_raw
+if(!exists("bikes_raw")) bikes_raw <- read_csv(here("raw_data", "combined_data_raw.csv")) else print("dataframe already exists")
+tictoc::toc()
+```
+
+
+### Summarizing NA values
+
+We run the `na_summary` function from the helper functions to see how many missing
+values exist for each variable.  This returns both the count and percentage of NA values.  We can see that **station name** and **station id** variables contain by
+far the most NA values (15-16%).  There is a small percentage of NA values for the end latitude and end longitude variables.  We will consider how to address NA values 
+after doing some other initial transformations.
+
+```{r na}
+bikes_raw %>% na_summary()
+```
+
+### Finding excess whitespace in character variables
+
+It is important to find and remove excess whitespace in character variables.  We 
+run the helper function ` find_whitespace` which detects leading and trailing spaces, 
+and multiple consecutive spaces.
+
+
+```{r whitespace}
+bikes_raw %>% select_if(is.character) %>% map_df(find_whitespace) %>% pivot_longer(cols = everything())
+```
+
+We can clean up the start and end station names and id's as follows: 
+
+- convert all names to uppercase
+
+- use `stringr::str_squish` to remove excess whitespace
+
+
+```{r}
+bikes <- bikes_raw %>% 
+  mutate_at(c("start_station_name", "start_station_id", "end_station_name", "end_station_id"), str_to_upper) %>% 
+  mutate_at(c("start_station_name", "start_station_id", "end_station_name", "end_station_id"), str_squish)
+glimpse(bikes)
+```
+
+We can then check for excess whitespace again and find that all variables have 
+no records with this issue.
+
+```{r}
+bikes %>% select_if(is.character) %>% map_df(find_whitespace)
+```
+
+#### Checking for duplicated records
+
+We count the total number of duplicated records in the data frame and find none. 
+
+```{r}
+if(!exists("bike_dups")) bike_dups <- sum(duplicated(bikes))
+bike_dups 
+```
+
+### Data Transformation
+
+### Cleaning up variable names 
+
+We make a couple of changes to make variable names easier to work with.  Specifically
+removing "bike" fomr the `rideable_type` variable, removing "station" from the 
+start and end station variables, and using "lon" to designate longitude.
+
+```{r}
+bikes_1 <- bikes %>% 
+  mutate(rideable_type = str_remove(rideable_type, "_bike$")) %>% 
+  rename(start_lon = start_lng, end_lon = end_lng) %>% 
+  rename_with(function(x) str_remove(x, "_station"))
+```
+
+### Extracting time information
+
+We perform several transformations to extract information from the time variables 
+`started_at` and `ended_at`:
+
+- extract trip duration and set duration to NA if it is less than 0
+
+- extract day of the week as `dow` and convert to an ordered factor, starting on
+Monday and ending on Sunday
+
+- extract hour of the day as `hod`, using trip start time
+
+- extract month as a numeric variable, as well as the abbreviated month (e.g. Jun, Jul, Aug)
+
+- extract the trip date in YYYY-MM-DD format
+
+- create `is_weekend` specifying if a trip took place on Saturday or Sunday
+
+- create `is_fss` specifying if a trip took place on Friday - Sunday
+
+
+```{r}
+bikes_2 <- bikes_1 %>%  
+   mutate(dur = (ended_at - started_at), .after = ended_at) %>% 
+   mutate(dur = replace(dur, dur < 0, NA)) %>% 
+   mutate(dow = wday(started_at, label = TRUE, abbr= TRUE), .after = dur) %>% 
+   mutate(dow = factor(dow, ordered = TRUE, levels = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"))) %>% 
+   mutate(hod = hour(started_at), .after = dur) %>% 
+   mutate(month = month(started_at), .after = dow) %>% 
+   mutate(month_abb = month(started_at, label = TRUE, abbr = TRUE), .after = month) %>% 
+   mutate(date = date(started_at), .after = ended_at) %>% 
+   mutate(is_weekend = ifelse(dow %in% c("Sat", "Sun"), TRUE, FALSE), .after = month_abb) %>% 
+   mutate(is_fss = ifelse(dow %in% c("Fri", "Sat", "Sun"), TRUE, FALSE), .after = is_weekend)
+glimpse(bikes_2)
+
+```
+
+
+### Joining holiday data
+
+It's reasonable to examine if ridership changes on holidays vs. non-holidays.  We
+read in an excel sheet containing holiday data and join this with the main data frame.
+Finally, we write the transformed data frame into the `data` folder as `bikes_1.csv`
+
+```{r}
+library(readxl)
+hdays <- read_excel(here("data", "holidays.xlsx"))
+glimpse(hdays)
+```
+
+
+
+```{r holidays, message = FALSE}
+bikes_3 <- bikes_2 %>% 
+  left_join(hdays, by = "date") %>% 
+  mutate(is_holiday = ifelse(!is.na(holiday), "yes", "no")) %>% 
+  mutate(holiday = ifelse(is.na(holiday), "none", holiday))
+glimpse(bikes_3)
+```
+
+```{r}
+bikes_3 %>%  write_csv(here("data", "bikes_1.csv"))
+```
+
+
+
+

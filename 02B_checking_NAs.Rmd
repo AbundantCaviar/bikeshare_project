@@ -1,0 +1,71 @@
+---
+title: "Checking NAs"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+```{r setup, include=FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+Begin by loading libraries and "helper functions" from the respective files.
+
+```{r libraries}
+source("00_libraries.r")
+source("helper_functions.r")
+```
+
+### Checking distribution of NA values
+
+Read in the `bikes_1` dataframe that was the product of the previous file
+```{r, echo=FALSE}
+bikes <- read_csv(here("data", "bikes_1.csv"))
+glimpse(bikes)
+```
+
+
+Begin by summarizing the count of NA values for each variable.  Start name and id,
+and end name and id have the highest frequency of missing values.
+
+```{r}
+na_counts <- na_summary(bikes) %>% 
+  arrange(desc(na_pct))
+
+na_counts %>% print(n = 30)
+```
+
+### NA summary by variable
+
+The helper functions contain a function to summarize the distribution of NA values in
+one variable based on levels of a second variable.  For this function, the first argument is the variable to summarize NA values over, and the second argument is the 
+variable containing NA values.  We look at the distribution of NA's in start_name and end_name by: month, day of week, and member vs. casual riders.
+
+```{r}
+bikes %>% summarize_na_by_var(month, start_name)
+bikes %>% summarize_na_by_var(month, end_name)
+bikes %>% summarize_na_by_var(member_casual, start_name)
+bikes %>% summarize_na_by_var(member_casual, end_name)
+bikes %>% summarize_na_by_var(dow, start_name)
+bikes %>% summarize_na_by_var(dow, end_name)
+```
+
+Overall, there are no dramatic differences in the occurrence of NA values for the 
+variables examined.  For month and day of week, NA values seem to be largely evenly distributed.  For end_name, there may be slightly more NA values for casuals than for
+members.  
+
+Because of these findings, for subsequent analyses, I decided to simply discard NA values
+
+*Note: I tried imputing NA values using k-nearest neighbors based on lat and lon,
+but this takes an exceedingly long time for this large of a dataset.
+However, this would be an approach to consider if more resources were available*
+
+
