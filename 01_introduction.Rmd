@@ -1,0 +1,121 @@
+---
+title: "Introduction"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+source("00_libraries.r")
+```
+
+### Introduction to case study
+
+This is a case study which I completed for the [*Google Data Analytics Professional
+Certificate*](https://www.coursera.org/professional-certificates/google-data-analytics). The goal
+of this case study is to assist **Cyclistic**, a fictional bike-share 
+`r icon_style(fontawesome("bicycle", style = "solid"), scale = 2, fill = "purple") ` company offering rentals in Chicago, IL.  
+
+Cyclistic recognizes two types of riders:
+
+- **Members** are users who hold annual memberships
+
+- **Casual riders** are users who use single-ride passes or day passes
+
+Cyclistic finds that members are more profitable than casual riders, hence they would
+like to create marketing strategies to convert casual riders to members.  To do so,
+they want to understand differences in how members and casual riders use the bike-share 
+service.  
+
+In this study, I analyzed ridership data spanning from November 2022 - October 2023
+to identify differences in member and casual ridership.  I wanted to include a 
+complete year of data in my analysis in order to uncover seasonal differences that
+might exist between the two types of riders.  The report for this case study will
+cover several phases of data analysis:
+
+- Downloading data
+
+- Inspecting, cleaning, and data transformation
+
+- Exploratory data analysis
+
+- Plotting
+
+- Modeling to find variables that predict member vs. casual rider type
+
+
+### Downloading data
+
+Raw data files were downloaded from here: https://divvy-tripdata.s3.amazonaws.com/index.html
+
+Each .zip file represents a month of trip data.  I downloaded files spanning the 
+time period from November 2022 - October 2023.  
+
+The below code sets the url root for trip data files.  It then loads necessary
+libraries.  Finally, we run a script to download files, placing them in the "data" subfolder 
+of our project and then unzipping them.  
+
+
+```{r url, eval = FALSE}
+url_root <- "https://divvy-tripdata.s3.amazonaws.com/"
+```
+
+```{r libraries, message = FALSE, warning = FALSE}
+source(here("00_libraries.r"))
+```
+
+```{r, message = FALSE, eval = FALSE}
+source(here("00_file_downloads.r"))
+```
+
+### Combining data
+
+For this dataset, each month is represented by a single file.  We want to combine
+all the monthly data into a single data frame.  The below code sources the 
+script "01_reading_combining.r".  This script reads each **.csv** file into a list
+then uses `dplyr::bind_rows` to bind them into a single data frame.  The resulting 
+data frame has approximately **5.6 million** records.
+
+
+```{r combine, eval = FALSE}
+source(here("01_reading_combining.r"))
+```
+
+We can inspect the raw data. It contains the following variables:
+
+- the id column `ride_id`
+
+- `rideable_type` which represents the bike type (electric, classic, or docked)
+
+- trip start and end datetimes
+
+- start and end station names and station id's
+
+- start and end longitude and latitude
+
+- `member_casual`, the outcome variable of interest, whether the rider is a member or 
+casual rider
+
+```{r}
+
+if (file_exists(here("data", "combined_data_raw.csv"))) {
+  combined_data_raw <- read_csv(here("data", "combined_data_raw.csv"))
+}
+
+if (exists("combined_data_raw")) glimpse(combined_data_raw)
+```
+
+### Session information
+
+```{r}
+sessionInfo()
+```
