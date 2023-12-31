@@ -13,7 +13,7 @@
 
 <meta name="date" content="2023-12-28" />
 
-<title>Identifying Round Tripe</title>
+<title>Identifying Round Trips</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -591,7 +591,7 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Identifying Round Tripe</h1>
+<h1 class="title toc-ignore">Identifying Round Trips</h1>
 <h4 class="author">Doug Antibus</h4>
 <h4 class="date">2023-12-28</h4>
 
@@ -626,7 +626,7 @@ glimpse(rt_1)</code></pre>
 <code>ride_id</code>. If the round trip field is NA (i.e. not a round
 trip), set the variable to be “no”, else set it to be “yes”. We put this
 into a new dataframe called <code>bikes_new</code>.</p>
-<pre class="r"><code>bikes_new&lt;- bikes %&gt;% 
+<pre class="r"><code>bikes_new &lt;- bikes %&gt;% 
   left_join(rt_1, by = &quot;ride_id&quot;) %&gt;% 
   mutate(round_trip = ifelse(is.na(round_trip), &quot;no&quot;, &quot;yes&quot;))
 glimpse(bikes_new)</code></pre>

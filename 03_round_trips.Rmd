@@ -1,5 +1,5 @@
 ---
-title: "Identifying Round Tripe"
+title: "Round Trips"
 author: "Doug Antibus"
 date: "2023-12-28"
 output: 
@@ -26,7 +26,7 @@ take round trips.
 
 Start by reading in the most recent data frame `bikes_1`.
 
-```{r}
+```{r, cache=TRUE}
 bikes <- read_csv(here("data", "bikes_1.csv")) 
 ```
 
@@ -46,7 +46,7 @@ trip field is NA (i.e. not a round trip), set the variable to be "no", else set
 it to be "yes".  We put this into a new dataframe called `bikes_new`.
 
 ```{r}
-bikes_new<- bikes %>% 
+bikes_new <- bikes %>% 
   left_join(rt_1, by = "ride_id") %>% 
   mutate(round_trip = ifelse(is.na(round_trip), "no", "yes"))
 glimpse(bikes_new)
@@ -54,7 +54,7 @@ glimpse(bikes_new)
 
 Finally, write bikes_new to a file, `bikes_2.csv`.
 
-```{r, eval = FALSE}
+```{r, eval = FALSE, cache=TRUE}
 bikes_new %>% write_csv(here("data", "bikes_2.csv"))
 ```
 
