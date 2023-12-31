@@ -1,0 +1,125 @@
+---
+title: "Exploratory Data Analysis"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+source("00_libraries.r")
+```
+
+### Exploratory Data Analysis
+
+With the data cleaned and transformed, we can start asking basic questions in preparation
+for plotting and modeling.  We start by reading in the most recent data file `bikes_2.csv` 
+and omitting rows containing NA values.
+
+```{r, cache=TRUE}
+bikes <- read_csv(here("data", "bikes_2.csv")) %>% na.omit()
+glimpse(bikes)
+```
+
+#### Overall ridership
+
+First, we examine the overall distribution of member and casual trips. Member trips 
+outnumber casual trips 64% to 36%.  It will be important to consider this difference
+for subsequent analysis.
+
+```{r}
+mc <- bikes %>% group_by(member_casual) %>% 
+  summarize(n = n()) %>% 
+  mutate(percentage = round(100 * n / sum(n), 2))
+mc
+```
+### Bike types
+
+There are 3 `rideable_type`s (types of bikes) in the dataset: classic, electric, and docked.  The table below summarizes the abundance of trips for each bike type in the entire dataset.  Docked bikes represent a small proportion (2%) of trips.  Classic bike trips outnumber electric bike trips by 61% to 37%.
+
+```{r}
+ride_type <- bikes %>% group_by(rideable_type) %>% 
+  summarize(n = n()) %>% 
+  mutate(percentage = round(100 * n / sum(n), 2))
+ride_type
+```
+
+We break down trips by both bike type and member/casual (6 possible combinations). For each combination we calculate the percentage of total trips, as well as the percentage of trips for that membership type.  We find the following:
+
+- only casual riders use docked bikes
+
+- members prefer classic bikes: trips by members are enriched for classic rides compared to the dataset as a whole (64% vs. 61%; see preceeding table)
+
+- conversely, casuals prefer electric bikes: trips by casuals are *less* enriched 
+for classic bikes than the dataset as a whole
+
+
+```{r}
+mc_ride_type <- bikes %>% group_by(rideable_type, member_casual) %>% 
+  summarize(n = n()) %>% 
+  ungroup() %>% 
+  mutate(pct_of_total = round(100 * n / sum(n), 2)) %>% 
+  arrange(member_casual) %>% 
+  ungroup() %>% 
+  group_by(member_casual) %>% 
+  mutate(pct_by_membership_type = round(100 * n / sum(n), 2))
+mc_ride_type
+```
+### Who takes more round trips?
+
+The overall occurrence of round trips is fairly low.  However, casual riders are 
+over twice as likely as members to take round trips.  9.7% of casual trips are round trips vs. 4.6% of member trips.  
+
+One hypothesis we can consider is that members largely represent commuters (who 
+find value in a membership as they ride frequently), while casuals represent tourists.  This observation is consistent with that hypothesis: commuters might largely want to go from "Point A to Point B" so they would be expected to take 
+round trips less frequently than tourists, who might want to return to a point of 
+departure.
+
+```{r}
+round_trips <- bikes %>% 
+  group_by(member_casual) %>% 
+  summarize(total_trips = n(), 
+            round_trips = sum(round_trip == "yes"),
+            pct_round_trips = round(100 * round_trips / total_trips, 2))
+round_trips
+```
+
+### Who takes more trips on holidays?
+
+Holiday trips are fairly rare.  However, casual riders seem to take more trips on holidays (3.6% of casualm trips are on holidays vs. 2.8% of member trips).  A chi-square test shows that this difference is significant with a p-value of 0.
+
+```{r}
+holiday <- bikes %>% 
+  group_by(member_casual, is_holiday) %>% 
+  summarize(n = n()) %>% 
+  group_by(member_casual) %>% 
+  mutate(pct_of_rider_type = round(100 * n / sum(n), 2))
+holiday
+```
+
+```{r}
+chisq_test(bikes, is_holiday ~ member_casual)
+```
+
+Overall conclusions from the EDA include the following:
+
+- members take more trips than casual riders
+
+- members prefer classic bikes while casual riders prefer electric bikes
+
+- casual riders are more likely to take round trips than members (although
+not many round trips are taken overall)
+
+- casual riders are more likely to take trips on holidays (although holiday trips
+are not abundant overall)
+
+

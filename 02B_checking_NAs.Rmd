@@ -27,7 +27,7 @@ source("helper_functions.r")
 ### Checking distribution of NA values
 
 Read in the `bikes_1` dataframe that was the product of the previous file
-```{r, echo=FALSE}
+```{r, cache = TRUE}
 bikes <- read_csv(here("data", "bikes_1.csv"))
 glimpse(bikes)
 ```
@@ -36,7 +36,7 @@ glimpse(bikes)
 Begin by summarizing the count of NA values for each variable.  Start name and id,
 and end name and id have the highest frequency of missing values.
 
-```{r}
+```{r, cache = TRUE}
 na_counts <- na_summary(bikes) %>% 
   arrange(desc(na_pct))
 
@@ -49,7 +49,7 @@ The helper functions contain a function to summarize the distribution of NA valu
 one variable based on levels of a second variable.  For this function, the first argument is the variable to summarize NA values over, and the second argument is the 
 variable containing NA values.  We look at the distribution of NA's in start_name and end_name by: month, day of week, and member vs. casual riders.
 
-```{r}
+```{r cache = TRUE}
 bikes %>% summarize_na_by_var(month, start_name)
 bikes %>% summarize_na_by_var(month, end_name)
 bikes %>% summarize_na_by_var(member_casual, start_name)

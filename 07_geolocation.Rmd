@@ -1,0 +1,105 @@
+---
+title: "Station latitude and longitude"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+```{r setup, include = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(cache = TRUE)
+source("00_libraries.r")
+```
+
+### Transforming geolocation data 
+
+For future analyses (e.g. plotting lat and lon data), it will be helpful
+to summarize mean latitude and longitude by station.  We start by 
+reading in the most recent data file `bikes_1.csv`
+
+```{r import, cache = TRUE}
+bikes <- read_csv(here("data", "bikes_1.csv"))
+```
+
+Next, pull out data for trip starts and trip ends separately, remove NA values
+then bind these into a single data frame called `stations`
+
+```{r, cache = TRUE}
+starts <- bikes %>% select(ride_id, start_name, start_id, start_lat, start_lon) %>% 
+  rename_with(function(x) str_remove(x, "start_")) %>%
+  mutate(type = "start") %>% 
+  na.omit()
+
+ends <- bikes %>% select(ride_id, end_name, end_id, end_lat, end_lon) %>% 
+  rename_with(function(x) str_remove(x, "end_")) %>% 
+  mutate(type = "end") %>% 
+  na.omit() 
+
+stations <- bind_rows(starts, ends)
+glimpse(stations)
+```
+
+Next we use `group_by` on `stations` using name and id, and summarize the following
+(for both lat and lon):
+
+- min 
+
+- max
+
+- range
+
+- mean
+
+```{r, cache = TRUE}
+locations <- stations %>% 
+  group_by(name, id) %>% 
+  summarize(mean_lat = mean(lat),
+            min_lat = min(lat),
+            max_lat = max(lat),
+            rng_lat = min_lat - max_lat,
+            mean_lon = mean(lon),
+            min_lon = min(lon),
+            max_lon = max(lon),
+            rng_lon = min_lon - max_lon)
+
+locations %>% mutate_if(is.numeric, ~ round(.x, 4)) %>%  DT::datatable()
+```
+
+It turns out there are a few (11) records with `0` for lat or lon, we examine
+these
+
+```{r}
+zero_stations <- stations %>% filter(lat == 0 | lon == 0) 
+zero_stations
+```
+
+We remove records with 0 for lat or lon, then recalculate the mean lat and mean lon.
+Additionally, we count the total number of trip starts and trip ends.  
+
+```{r, cache = TRUE}
+locations_summary <- stations %>% 
+  filter(lat != 0, lon != 0) %>% 
+  group_by(name) %>% 
+  summarize(n = n(), 
+            n_start = sum(type == "start"),
+            n_end = sum(type == "end"),
+            mean_lat = mean(lat),
+            mean_lon = mean(lon))
+
+glimpse(locations_summary)
+```
+
+Finally we write the `locations_summary` data frame to a .csv file to save it 
+for future use.
+
+```{r, cache = TRUE}
+locations_summary %>% write_csv(here("results", "locations_summary.csv"))
+```

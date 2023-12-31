@@ -22,8 +22,7 @@ source("00_libraries.r")
 
 This is a case study which I completed for the [*Google Data Analytics Professional
 Certificate*](https://www.coursera.org/professional-certificates/google-data-analytics). The goal
-of this case study is to assist **Cyclistic**, a fictional bike-share 
-`r icon_style(fontawesome("bicycle", style = "solid"), scale = 2, fill = "purple") ` company offering rentals in Chicago, IL.  
+of this case study is to assist **Cyclistic**, a fictional bike-share `r icon_style(fontawesome("bicycle", style = "solid"), scale = 2, fill = "purple")` company offering rentals in Chicago, IL.  
 
 Cyclistic recognizes two types of riders:
 
@@ -65,7 +64,7 @@ libraries.  Finally, we run a script to download files, placing them in the "dat
 of our project and then unzipping them.  
 
 
-```{r url, eval = FALSE}
+```{r url}
 url_root <- "https://divvy-tripdata.s3.amazonaws.com/"
 ```
 
@@ -73,7 +72,7 @@ url_root <- "https://divvy-tripdata.s3.amazonaws.com/"
 source(here("00_libraries.r"))
 ```
 
-```{r, message = FALSE, eval = FALSE}
+```{r, message = FALSE, eval = FALSE, cache=TRUE}
 source(here("00_file_downloads.r"))
 ```
 
@@ -86,7 +85,7 @@ then uses `dplyr::bind_rows` to bind them into a single data frame.  The resulti
 data frame has approximately **5.6 million** records.
 
 
-```{r combine, eval = FALSE}
+```{r combine, eval = FALSE, cache=TRUE}
 source(here("01_reading_combining.r"))
 ```
 
@@ -105,7 +104,7 @@ We can inspect the raw data. It contains the following variables:
 - `member_casual`, the outcome variable of interest, whether the rider is a member or 
 casual rider
 
-```{r}
+```{r, cache=TRUE}
 
 if (file_exists(here("data", "combined_data_raw.csv"))) {
   combined_data_raw <- read_csv(here("data", "combined_data_raw.csv"))

@@ -13,7 +13,7 @@
 
 <meta name="date" content="2023-12-28" />
 
-<title>Initial Cleaning and Transformation</title>
+<title>Exploratory Data Analysis</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -591,7 +591,7 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Initial Cleaning and Transformation</h1>
+<h1 class="title toc-ignore">Exploratory Data Analysis</h1>
 <h4 class="author">Doug Antibus</h4>
 <h4 class="date">2023-12-28</h4>
 
@@ -599,188 +599,34 @@ display: none;
 
 <div id="TOC">
 <ul>
-<li><a href="#initial-checking-and-data-transformation" id="toc-initial-checking-and-data-transformation">Initial checking and
-data transformation</a></li>
-<li><a href="#summarizing-na-values" id="toc-summarizing-na-values">Summarizing NA values</a></li>
-<li><a href="#finding-excess-whitespace-in-character-variables" id="toc-finding-excess-whitespace-in-character-variables">Finding excess
-whitespace in character variables</a></li>
-<li><a href="#data-transformation" id="toc-data-transformation">Data
-Transformation</a></li>
-<li><a href="#variable-names" id="toc-variable-names">Variable
-names</a></li>
-<li><a href="#extracting-time-information" id="toc-extracting-time-information">Extracting time
-information</a></li>
-<li><a href="#joining-holiday-data" id="toc-joining-holiday-data">Joining holiday data</a></li>
+<li><a href="#exploratory-data-analysis" id="toc-exploratory-data-analysis">Exploratory Data Analysis</a></li>
+<li><a href="#bike-types" id="toc-bike-types">Bike types</a></li>
+<li><a href="#who-takes-more-round-trips" id="toc-who-takes-more-round-trips">Who takes more round trips?</a></li>
+<li><a href="#who-takes-more-trips-on-holidays" id="toc-who-takes-more-trips-on-holidays">Who takes more trips on
+holidays?</a></li>
 </ul>
 </div>
 
-<div id="initial-checking-and-data-transformation" class="section level3">
-<h3>Initial checking and data transformation</h3>
-<p>We want to start by checking data integrity, e.g. whether columns are
-of the right type, missing values, naming consistency for categorical
-variables, and so on. I created a script of helper functions which will
-be useful throughout this analysis, so we start by sourcing these.</p>
-<pre class="r"><code>source(&quot;helper_functions.r&quot;)</code></pre>
-<p>The dataset may take ~ 30 seconds to load, therefore we only load it
-if it’s not already in the workspace.</p>
-<pre class="r"><code>tictoc::tic()
-if (exists(&quot;combined_data_raw&quot;)) bikes_raw &lt;- combined_data_raw
-if(!exists(&quot;bikes_raw&quot;)) bikes_raw &lt;- read_csv(here(&quot;data&quot;, &quot;combined_data_raw.csv&quot;)) else print(&quot;dataframe already exists&quot;)
-tictoc::toc()</code></pre>
-<pre><code>## 30.1 sec elapsed</code></pre>
-</div>
-<div id="summarizing-na-values" class="section level3">
-<h3>Summarizing NA values</h3>
-<p>We run the <code>na_summary</code> function from the helper functions
-to see how many missing values exist for each variable. This returns
-both the count and percentage of NA values. The <strong>station
-name</strong> and <strong>station id</strong> variables contain by far
-the most NA values (15-16%). There is a small percentage of NA values
-for the end latitude and end longitude variables. We will consider how
-to address NA values after doing some other data transformations.</p>
-<pre class="r"><code>bikes_raw %&gt;% na_summary()</code></pre>
-<pre><code>## # A tibble: 13 × 3
-##    variable           na_count na_pct
-##    &lt;chr&gt;                 &lt;int&gt;  &lt;dbl&gt;
-##  1 ride_id                   0  0    
-##  2 rideable_type             0  0    
-##  3 started_at                0  0    
-##  4 ended_at                  0  0    
-##  5 start_station_name   866243 15.3  
-##  6 start_station_id     866375 15.3  
-##  7 end_station_name     918796 16.3  
-##  8 end_station_id       918937 16.3  
-##  9 start_lat                 0  0    
-## 10 start_lng                 0  0    
-## 11 end_lat                6759  0.120
-## 12 end_lng                6759  0.120
-## 13 member_casual             0  0</code></pre>
-</div>
-<div id="finding-excess-whitespace-in-character-variables" class="section level3">
-<h3>Finding excess whitespace in character variables</h3>
-<p>It is important to find and remove excess whitespace in character
-variables. We run the helper function <code>find_whitespace</code> which
-detects leading and trailing spaces, and multiple consecutive
-spaces.</p>
-<pre class="r"><code>bikes_raw %&gt;% select_if(is.character) %&gt;% map_df(find_whitespace) %&gt;% pivot_longer(cols = everything())</code></pre>
-<pre><code>## # A tibble: 7 × 2
-##   name               value
-##   &lt;chr&gt;              &lt;int&gt;
-## 1 ride_id                0
-## 2 rideable_type          0
-## 3 start_station_name     3
-## 4 start_station_id       0
-## 5 end_station_name       2
-## 6 end_station_id         0
-## 7 member_casual          0</code></pre>
-<p>We can clean up the start and end station names and id’s as
-follows:</p>
-<ul>
-<li><p>convert all names to uppercase</p></li>
-<li><p>use <code>stringr::str_squish</code> to remove excess
-whitespace</p></li>
-</ul>
-<pre class="r"><code>bikes &lt;- bikes_raw %&gt;% 
-  mutate_at(c(&quot;start_station_name&quot;, &quot;start_station_id&quot;, &quot;end_station_name&quot;, &quot;end_station_id&quot;), str_to_upper) %&gt;% 
-  mutate_at(c(&quot;start_station_name&quot;, &quot;start_station_id&quot;, &quot;end_station_name&quot;, &quot;end_station_id&quot;), str_squish)</code></pre>
-<p>We can then check for excess whitespace again and find that all
-variables have no records with this issue.</p>
-<pre class="r"><code>bikes %&gt;% select_if(is.character) %&gt;% map_df(find_whitespace) %&gt;% pivot_longer(cols = everything())</code></pre>
-<pre><code>## # A tibble: 7 × 2
-##   name               value
-##   &lt;chr&gt;              &lt;int&gt;
-## 1 ride_id                0
-## 2 rideable_type          0
-## 3 start_station_name     0
-## 4 start_station_id       0
-## 5 end_station_name       0
-## 6 end_station_id         0
-## 7 member_casual          0</code></pre>
-<div id="checking-for-duplicated-records" class="section level4">
-<h4>Checking for duplicated records</h4>
-<p>We count the total number of duplicated records in the data frame and
-find none.</p>
-<pre class="r"><code>if(!exists(&quot;bike_duplicates&quot;)) bike_duplicates &lt;- sum(duplicated(bikes))
-bike_duplicates </code></pre>
-<pre><code>## [1] 0</code></pre>
-</div>
-</div>
-<div id="data-transformation" class="section level3">
-<h3>Data Transformation</h3>
-</div>
-<div id="variable-names" class="section level3">
-<h3>Variable names</h3>
-<p>We make a couple of changes to make variable names easier to work
-with. Specifically removing “bike” from the <code>rideable_type</code>
-variable, removing “station” from the start and end station variables,
-and using “lon” to designate longitude.</p>
-<pre class="r"><code>bikes_1 &lt;- bikes %&gt;% 
-  mutate(rideable_type = str_remove(rideable_type, &quot;_bike$&quot;)) %&gt;% 
-  rename(start_lon = start_lng, end_lon = end_lng) %&gt;% 
-  rename_with(function(x) str_remove(x, &quot;_station&quot;))</code></pre>
-</div>
-<div id="extracting-time-information" class="section level3">
-<h3>Extracting time information</h3>
-<p>We perform several transformations to extract information from the
-time variables <code>started_at</code> and <code>ended_at</code>:</p>
-<ul>
-<li><p>extract trip duration and set duration to NA if it is less than
-0</p></li>
-<li><p>extract day of the week as <code>dow</code> and convert to an
-ordered factor, starting on Monday and ending on Sunday</p></li>
-<li><p>extract hour of the day as <code>hod</code>, using trip start
-time</p></li>
-<li><p>extract month as a numeric variable, as well as the abbreviated
-month (e.g. Jun, Jul, Aug)</p></li>
-<li><p>extract the trip date in YYYY-MM-DD format</p></li>
-<li><p>create <code>is_weekend</code> specifying if a trip took place on
-Saturday or Sunday</p></li>
-<li><p>create <code>is_fss</code> specifying if a trip took place on
-Friday - Sunday</p></li>
-</ul>
-<pre class="r"><code>bikes_2 &lt;- bikes_1 %&gt;%  
-   mutate(dur = (ended_at - started_at), .after = ended_at) %&gt;% 
-   mutate(dur = replace(dur, dur &lt; 0, NA)) %&gt;% 
-   mutate(dow = wday(started_at, label = TRUE, abbr= TRUE), .after = dur) %&gt;% 
-   mutate(dow = factor(dow, ordered = TRUE, levels = c(&quot;Mon&quot;, &quot;Tue&quot;, &quot;Wed&quot;, &quot;Thu&quot;, &quot;Fri&quot;, &quot;Sat&quot;, &quot;Sun&quot;))) %&gt;% 
-   mutate(hod = hour(started_at), .after = dur) %&gt;% 
-   mutate(month = month(started_at), .after = dow) %&gt;% 
-   mutate(month_abb = month(started_at, label = TRUE, abbr = TRUE), .after = month) %&gt;% 
-   mutate(date = date(started_at), .after = ended_at) %&gt;% 
-   mutate(is_weekend = ifelse(dow %in% c(&quot;Sat&quot;, &quot;Sun&quot;), TRUE, FALSE), .after = month_abb) %&gt;% 
-   mutate(is_fss = ifelse(dow %in% c(&quot;Fri&quot;, &quot;Sat&quot;, &quot;Sun&quot;), TRUE, FALSE), .after = is_weekend)</code></pre>
-</div>
-<div id="joining-holiday-data" class="section level3">
-<h3>Joining holiday data</h3>
-<p>It’s reasonable to examine if ridership changes on holidays
-vs. non-holidays. We read in an excel sheet containing holiday data and
-join this with the main data frame. Finally, we write the transformed
-data frame into the <code>data</code> folder as
-<code>bikes_1.csv</code></p>
-<pre class="r"><code>library(readxl)
-hdays &lt;- read_excel(here(&quot;data&quot;, &quot;holidays.xlsx&quot;))
-glimpse(hdays)</code></pre>
-<pre><code>## Rows: 23
-## Columns: 2
-## $ date    &lt;dttm&gt; 2023-05-29, NA, NA, 2023-07-04, NA, NA, 2022-12-25, 2022-12-2…
-## $ holiday &lt;chr&gt; &quot;memorial day&quot;, NA, NA, &quot;July 4th&quot;, NA, NA, &quot;Christmas Day&quot;, &quot;…</code></pre>
-<pre class="r"><code>bikes_3 &lt;- bikes_2 %&gt;% 
-  left_join(hdays, by = &quot;date&quot;) %&gt;% 
-  mutate(is_holiday = ifelse(!is.na(holiday), &quot;yes&quot;, &quot;no&quot;)) %&gt;% 
-  mutate(holiday = ifelse(is.na(holiday), &quot;none&quot;, holiday))
-glimpse(bikes_3)</code></pre>
-<pre><code>## Rows: 5,652,827
-## Columns: 23
+<div id="exploratory-data-analysis" class="section level3">
+<h3>Exploratory Data Analysis</h3>
+<p>With the data cleaned and transformed, we can start asking basic
+questions in preparation for plotting and modeling. We start by reading
+in the most recent data file <code>bikes_2.csv</code> and omitting rows
+containing NA values.</p>
+<pre class="r"><code>bikes &lt;- read_csv(here(&quot;data&quot;, &quot;bikes_2.csv&quot;)) %&gt;% na.omit()
+glimpse(bikes)</code></pre>
+<pre><code>## Rows: 4,280,900
+## Columns: 24
 ## $ ride_id       &lt;chr&gt; &quot;BCC66FC6FAB27CC7&quot;, &quot;772AB67E902C180F&quot;, &quot;585EAD07FDEC015…
 ## $ rideable_type &lt;chr&gt; &quot;electric&quot;, &quot;classic&quot;, &quot;classic&quot;, &quot;classic&quot;, &quot;classic&quot;, …
 ## $ started_at    &lt;dttm&gt; 2022-11-10 06:21:55, 2022-11-04 07:31:55, 2022-11-21 17…
 ## $ ended_at      &lt;dttm&gt; 2022-11-10 06:31:27, 2022-11-04 07:46:25, 2022-11-21 17…
 ## $ date          &lt;dttm&gt; 2022-11-10, 2022-11-04, 2022-11-21, 2022-11-25, 2022-11…
-## $ dur           &lt;drtn&gt; 572 secs, 870 secs, 847 secs, 941 secs, 1106 secs, 708 …
-## $ hod           &lt;int&gt; 6, 7, 17, 17, 17, 14, 14, 20, 21, 20, 20, 0, 17, 15, 15,…
-## $ dow           &lt;ord&gt; Thu, Fri, Mon, Fri, Tue, Fri, Sun, Tue, Sun, Tue, Mon, S…
+## $ dur           &lt;dbl&gt; 572, 870, 847, 941, 1106, 708, 571, 529, 571, 383, 476, …
+## $ hod           &lt;dbl&gt; 6, 7, 17, 17, 17, 14, 14, 20, 21, 20, 20, 0, 17, 15, 15,…
+## $ dow           &lt;chr&gt; &quot;Thu&quot;, &quot;Fri&quot;, &quot;Mon&quot;, &quot;Fri&quot;, &quot;Tue&quot;, &quot;Fri&quot;, &quot;Sun&quot;, &quot;Tue&quot;, …
 ## $ month         &lt;dbl&gt; 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, …
-## $ month_abb     &lt;ord&gt; Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, N…
+## $ month_abb     &lt;chr&gt; &quot;Nov&quot;, &quot;Nov&quot;, &quot;Nov&quot;, &quot;Nov&quot;, &quot;Nov&quot;, &quot;Nov&quot;, &quot;Nov&quot;, &quot;Nov&quot;, …
 ## $ is_weekend    &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, T…
 ## $ is_fss        &lt;lgl&gt; FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, TRUE, FALSE, TRUE…
 ## $ start_name    &lt;chr&gt; &quot;CANAL ST &amp; ADAMS ST&quot;, &quot;CANAL ST &amp; ADAMS ST&quot;, &quot;INDIANA A…
@@ -793,8 +639,131 @@ glimpse(bikes_3)</code></pre>
 ## $ end_lon       &lt;dbl&gt; -87.62280, -87.62280, -87.62280, -87.62280, -87.62280, -…
 ## $ member_casual &lt;chr&gt; &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;membe…
 ## $ holiday       &lt;chr&gt; &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, …
-## $ is_holiday    &lt;chr&gt; &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;n…</code></pre>
-<pre class="r"><code>bikes_3 %&gt;%  write_csv(here(&quot;data&quot;, &quot;bikes_1.csv&quot;))</code></pre>
+## $ is_holiday    &lt;chr&gt; &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;n…
+## $ round_trip    &lt;chr&gt; &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;n…</code></pre>
+<div id="overall-ridership" class="section level4">
+<h4>Overall ridership</h4>
+<p>First, we examine the overall distribution of member and casual
+trips. Member trips outnumber casual trips 64% to 36%. It will be
+important to consider this difference for subsequent analysis.</p>
+<pre class="r"><code>mc &lt;- bikes %&gt;% group_by(member_casual) %&gt;% 
+  summarize(n = n()) %&gt;% 
+  mutate(percentage = round(100 * n / sum(n), 2))
+mc</code></pre>
+<pre><code>## # A tibble: 2 × 3
+##   member_casual       n percentage
+##   &lt;chr&gt;           &lt;int&gt;      &lt;dbl&gt;
+## 1 casual        1527998       35.7
+## 2 member        2752902       64.3</code></pre>
+</div>
+</div>
+<div id="bike-types" class="section level3">
+<h3>Bike types</h3>
+<p>There are 3 <code>rideable_type</code>s (types of bikes) in the
+dataset: classic, electric, and docked. The table below summarizes the
+abundance of trips for each bike type in the entire dataset. Docked
+bikes represent a small proportion (2%) of trips. Classic bike trips
+outnumber electric bike trips by 61% to 37%.</p>
+<pre class="r"><code>ride_type &lt;- bikes %&gt;% group_by(rideable_type) %&gt;% 
+  summarize(n = n()) %&gt;% 
+  mutate(percentage = round(100 * n / sum(n), 2))
+ride_type</code></pre>
+<pre><code>## # A tibble: 3 × 3
+##   rideable_type       n percentage
+##   &lt;chr&gt;           &lt;int&gt;      &lt;dbl&gt;
+## 1 classic       2628446      61.4 
+## 2 docked          83790       1.96
+## 3 electric      1568664      36.6</code></pre>
+<p>We break down trips by both bike type and member/casual (6 possible
+combinations). For each combination we calculate the percentage of total
+trips, as well as the percentage of trips for that membership type. We
+find the following:</p>
+<ul>
+<li><p>only casual riders use docked bikes</p></li>
+<li><p>members prefer classic bikes: trips by members are enriched for
+classic rides compared to the dataset as a whole (64% vs. 61%; see
+preceeding table)</p></li>
+<li><p>conversely, casuals prefer electric bikes: trips by casuals are
+<em>less</em> enriched for classic bikes than the dataset as a
+whole</p></li>
+</ul>
+<pre class="r"><code>mc_ride_type &lt;- bikes %&gt;% group_by(rideable_type, member_casual) %&gt;% 
+  summarize(n = n()) %&gt;% 
+  ungroup() %&gt;% 
+  mutate(pct_of_total = round(100 * n / sum(n), 2)) %&gt;% 
+  arrange(member_casual) %&gt;% 
+  ungroup() %&gt;% 
+  group_by(member_casual) %&gt;% 
+  mutate(pct_by_membership_type = round(100 * n / sum(n), 2))
+mc_ride_type</code></pre>
+<pre><code>## # A tibble: 5 × 5
+## # Groups:   member_casual [2]
+##   rideable_type member_casual       n pct_of_total pct_by_membership_type
+##   &lt;chr&gt;         &lt;chr&gt;           &lt;int&gt;        &lt;dbl&gt;                  &lt;dbl&gt;
+## 1 classic       casual         856026        20                     56.0 
+## 2 docked        casual          83790         1.96                   5.48
+## 3 electric      casual         588182        13.7                   38.5 
+## 4 classic       member        1772420        41.4                   64.4 
+## 5 electric      member         980482        22.9                   35.6</code></pre>
+</div>
+<div id="who-takes-more-round-trips" class="section level3">
+<h3>Who takes more round trips?</h3>
+<p>The overall occurrence of round trips is fairly low. However, casual
+riders are over twice as likely as members to take round trips. 9.7% of
+casual trips are round trips vs. 4.6% of member trips.</p>
+<p>One hypothesis we can consider is that members largely represent
+commuters (who find value in a membership as they ride frequently),
+while casuals represent tourists. This observation is consistent with
+that hypothesis: commuters might largely want to go from “Point A to
+Point B” so they would be expected to take round trips less frequently
+than tourists, who might want to return to a point of departure.</p>
+<pre class="r"><code>round_trips &lt;- bikes %&gt;% 
+  group_by(member_casual) %&gt;% 
+  summarize(total_trips = n(), 
+            round_trips = sum(round_trip == &quot;yes&quot;),
+            pct_round_trips = round(100 * round_trips / total_trips, 2))
+round_trips</code></pre>
+<pre><code>## # A tibble: 2 × 4
+##   member_casual total_trips round_trips pct_round_trips
+##   &lt;chr&gt;               &lt;int&gt;       &lt;int&gt;           &lt;dbl&gt;
+## 1 casual            1527998      148871            9.74
+## 2 member            2752902      126302            4.59</code></pre>
+</div>
+<div id="who-takes-more-trips-on-holidays" class="section level3">
+<h3>Who takes more trips on holidays?</h3>
+<p>Holiday trips are fairly rare. However, casual riders seem to take
+more trips on holidays (3.6% of casualm trips are on holidays vs. 2.8%
+of member trips). A chi-square test shows that this difference is
+significant with a p-value of 0.</p>
+<pre class="r"><code>holiday &lt;- bikes %&gt;% 
+  group_by(member_casual, is_holiday) %&gt;% 
+  summarize(n = n()) %&gt;% 
+  group_by(member_casual) %&gt;% 
+  mutate(pct_of_rider_type = round(100 * n / sum(n), 2))
+holiday</code></pre>
+<pre><code>## # A tibble: 4 × 4
+## # Groups:   member_casual [2]
+##   member_casual is_holiday       n pct_of_rider_type
+##   &lt;chr&gt;         &lt;chr&gt;        &lt;int&gt;             &lt;dbl&gt;
+## 1 casual        no         1472302             96.4 
+## 2 casual        yes          55696              3.65
+## 3 member        no         2675482             97.2 
+## 4 member        yes          77420              2.81</code></pre>
+<pre class="r"><code>chisq_test(bikes, is_holiday ~ member_casual)</code></pre>
+<pre><code>## # A tibble: 1 × 3
+##   statistic chisq_df p_value
+##       &lt;dbl&gt;    &lt;int&gt;   &lt;dbl&gt;
+## 1     2261.        1       0</code></pre>
+<p>Overall conclusions from the EDA include the following:</p>
+<ul>
+<li><p>members take more trips than casual riders</p></li>
+<li><p>members prefer classic bikes while casual riders prefer electric
+bikes</p></li>
+<li><p>casual riders are more likely to take round trips than members
+(although not many round trips are taken overall)</p></li>
+<li><p>casual riders are more likely to take trips on holidays (although
+holiday trips are not abundant overall)</p></li>
+</ul>
 </div>
 
 

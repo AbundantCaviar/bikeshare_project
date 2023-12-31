@@ -13,7 +13,7 @@
 
 <meta name="date" content="2023-12-28" />
 
-<title>Initial Cleaning and Transformation</title>
+<title>Conclusions and Recommendations</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -591,7 +591,7 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Initial Cleaning and Transformation</h1>
+<h1 class="title toc-ignore">Conclusions and Recommendations</h1>
 <h4 class="author">Doug Antibus</h4>
 <h4 class="date">2023-12-28</h4>
 
@@ -599,202 +599,61 @@ display: none;
 
 <div id="TOC">
 <ul>
-<li><a href="#initial-checking-and-data-transformation" id="toc-initial-checking-and-data-transformation">Initial checking and
-data transformation</a></li>
-<li><a href="#summarizing-na-values" id="toc-summarizing-na-values">Summarizing NA values</a></li>
-<li><a href="#finding-excess-whitespace-in-character-variables" id="toc-finding-excess-whitespace-in-character-variables">Finding excess
-whitespace in character variables</a></li>
-<li><a href="#data-transformation" id="toc-data-transformation">Data
-Transformation</a></li>
-<li><a href="#variable-names" id="toc-variable-names">Variable
-names</a></li>
-<li><a href="#extracting-time-information" id="toc-extracting-time-information">Extracting time
-information</a></li>
-<li><a href="#joining-holiday-data" id="toc-joining-holiday-data">Joining holiday data</a></li>
+<li><a href="#project-goals" id="toc-project-goals">Project
+Goals</a></li>
+<li><a href="#outcomes-and-findings" id="toc-outcomes-and-findings">Outcomes and Findings</a></li>
+<li><a href="#recommendations" id="toc-recommendations">Recommendations</a></li>
 </ul>
 </div>
 
-<div id="initial-checking-and-data-transformation" class="section level3">
-<h3>Initial checking and data transformation</h3>
-<p>We want to start by checking data integrity, e.g. whether columns are
-of the right type, missing values, naming consistency for categorical
-variables, and so on. I created a script of helper functions which will
-be useful throughout this analysis, so we start by sourcing these.</p>
-<pre class="r"><code>source(&quot;helper_functions.r&quot;)</code></pre>
-<p>The dataset may take ~ 30 seconds to load, therefore we only load it
-if it’s not already in the workspace.</p>
-<pre class="r"><code>tictoc::tic()
-if (exists(&quot;combined_data_raw&quot;)) bikes_raw &lt;- combined_data_raw
-if(!exists(&quot;bikes_raw&quot;)) bikes_raw &lt;- read_csv(here(&quot;data&quot;, &quot;combined_data_raw.csv&quot;)) else print(&quot;dataframe already exists&quot;)
-tictoc::toc()</code></pre>
-<pre><code>## 30.1 sec elapsed</code></pre>
+<div id="project-goals" class="section level3">
+<h3>Project Goals</h3>
+<p>The goal of this project was the help the fictional bike-share
+<svg viewBox="0 0 640 512" style="position:relative;display:inline-block;top:.1em;fill:purple;height:2em;" xmlns="http://www.w3.org/2000/svg">
+<path d="M512.509 192.001c-16.373-.064-32.03 2.955-46.436 8.495l-77.68-125.153A24 24 0 0 0 368.001 64h-64c-8.837 0-16 7.163-16 16v16c0 8.837 7.163 16 16 16h50.649l14.896 24H256.002v-16c0-8.837-7.163-16-16-16h-87.459c-13.441 0-24.777 10.999-24.536 24.437.232 13.044 10.876 23.563 23.995 23.563h48.726l-29.417 47.52c-13.433-4.83-27.904-7.483-42.992-7.52C58.094 191.83.412 249.012.002 319.236-.413 390.279 57.055 448 128.002 448c59.642 0 109.758-40.793 123.967-96h52.033a24 24 0 0 0 20.406-11.367L410.37 201.77l14.938 24.067c-25.455 23.448-41.385 57.081-41.307 94.437.145 68.833 57.899 127.051 126.729 127.719 70.606.685 128.181-55.803 129.255-125.996 1.086-70.941-56.526-129.72-127.476-129.996zM186.75 265.772c9.727 10.529 16.673 23.661 19.642 38.228h-43.306l23.664-38.228zM128.002 400c-44.112 0-80-35.888-80-80s35.888-80 80-80c5.869 0 11.586.653 17.099 1.859l-45.505 73.509C89.715 331.327 101.213 352 120.002 352h81.3c-12.37 28.225-40.562 48-73.3 48zm162.63-96h-35.624c-3.96-31.756-19.556-59.894-42.383-80.026L237.371 184h127.547l-74.286 120zm217.057 95.886c-41.036-2.165-74.049-35.692-75.627-76.755-.812-21.121 6.633-40.518 19.335-55.263l44.433 71.586c4.66 7.508 14.524 9.816 22.032 5.156l13.594-8.437c7.508-4.66 9.817-14.524 5.156-22.032l-44.468-71.643a79.901 79.901 0 0 1 19.858-2.497c44.112 0 80 35.888 80 80-.001 45.54-38.252 82.316-84.313 79.885z"></path></svg>
+company <strong>Cyclistic</strong> understand differences in how
+<strong>members</strong> and <strong>casual users</strong> of their
+bike-share service differ in patterns of ridership. This was in order to
+improve their marketing strategy (in particular social media marketing)
+with the aim of converting more casual users to members.</p>
 </div>
-<div id="summarizing-na-values" class="section level3">
-<h3>Summarizing NA values</h3>
-<p>We run the <code>na_summary</code> function from the helper functions
-to see how many missing values exist for each variable. This returns
-both the count and percentage of NA values. The <strong>station
-name</strong> and <strong>station id</strong> variables contain by far
-the most NA values (15-16%). There is a small percentage of NA values
-for the end latitude and end longitude variables. We will consider how
-to address NA values after doing some other data transformations.</p>
-<pre class="r"><code>bikes_raw %&gt;% na_summary()</code></pre>
-<pre><code>## # A tibble: 13 × 3
-##    variable           na_count na_pct
-##    &lt;chr&gt;                 &lt;int&gt;  &lt;dbl&gt;
-##  1 ride_id                   0  0    
-##  2 rideable_type             0  0    
-##  3 started_at                0  0    
-##  4 ended_at                  0  0    
-##  5 start_station_name   866243 15.3  
-##  6 start_station_id     866375 15.3  
-##  7 end_station_name     918796 16.3  
-##  8 end_station_id       918937 16.3  
-##  9 start_lat                 0  0    
-## 10 start_lng                 0  0    
-## 11 end_lat                6759  0.120
-## 12 end_lng                6759  0.120
-## 13 member_casual             0  0</code></pre>
-</div>
-<div id="finding-excess-whitespace-in-character-variables" class="section level3">
-<h3>Finding excess whitespace in character variables</h3>
-<p>It is important to find and remove excess whitespace in character
-variables. We run the helper function <code>find_whitespace</code> which
-detects leading and trailing spaces, and multiple consecutive
-spaces.</p>
-<pre class="r"><code>bikes_raw %&gt;% select_if(is.character) %&gt;% map_df(find_whitespace) %&gt;% pivot_longer(cols = everything())</code></pre>
-<pre><code>## # A tibble: 7 × 2
-##   name               value
-##   &lt;chr&gt;              &lt;int&gt;
-## 1 ride_id                0
-## 2 rideable_type          0
-## 3 start_station_name     3
-## 4 start_station_id       0
-## 5 end_station_name       2
-## 6 end_station_id         0
-## 7 member_casual          0</code></pre>
-<p>We can clean up the start and end station names and id’s as
-follows:</p>
+<div id="outcomes-and-findings" class="section level3">
+<h3>Outcomes and Findings</h3>
+<p>In this analysis I obtained relevant data, cleaned it, performed EDA,
+modeling, and visualization in order to understand differences in the
+behavior of members and casual riders. Some of the key findings
+included:</p>
 <ul>
-<li><p>convert all names to uppercase</p></li>
-<li><p>use <code>stringr::str_squish</code> to remove excess
-whitespace</p></li>
+<li><p>Casual users tend to start and end trips at different stations
+than members. Many of the stations favored by casual users are popular
+recreational or tourist destinations</p></li>
+<li><p>Casual users show more activity on weekends, while members show
+more activity on weekdays.</p></li>
+<li><p>casual users show a strong preference for taking trips during
+late Spring and Summer, while members also show this preference but to a
+lesser degree.</p></li>
 </ul>
-<pre class="r"><code>bikes &lt;- bikes_raw %&gt;% 
-  mutate_at(c(&quot;start_station_name&quot;, &quot;start_station_id&quot;, &quot;end_station_name&quot;, &quot;end_station_id&quot;), str_to_upper) %&gt;% 
-  mutate_at(c(&quot;start_station_name&quot;, &quot;start_station_id&quot;, &quot;end_station_name&quot;, &quot;end_station_id&quot;), str_squish)</code></pre>
-<p>We can then check for excess whitespace again and find that all
-variables have no records with this issue.</p>
-<pre class="r"><code>bikes %&gt;% select_if(is.character) %&gt;% map_df(find_whitespace) %&gt;% pivot_longer(cols = everything())</code></pre>
-<pre><code>## # A tibble: 7 × 2
-##   name               value
-##   &lt;chr&gt;              &lt;int&gt;
-## 1 ride_id                0
-## 2 rideable_type          0
-## 3 start_station_name     0
-## 4 start_station_id       0
-## 5 end_station_name       0
-## 6 end_station_id         0
-## 7 member_casual          0</code></pre>
-<div id="checking-for-duplicated-records" class="section level4">
-<h4>Checking for duplicated records</h4>
-<p>We count the total number of duplicated records in the data frame and
-find none.</p>
-<pre class="r"><code>if(!exists(&quot;bike_duplicates&quot;)) bike_duplicates &lt;- sum(duplicated(bikes))
-bike_duplicates </code></pre>
-<pre><code>## [1] 0</code></pre>
+<p>Overall, the data are consistent with the hypothesis that casual
+users are tourists or other itinerant users, while members are using the
+service to commute to and from work or school. This makes sense, as
+users who regularly commute would see more value in buying an annual
+pass.</p>
 </div>
-</div>
-<div id="data-transformation" class="section level3">
-<h3>Data Transformation</h3>
-</div>
-<div id="variable-names" class="section level3">
-<h3>Variable names</h3>
-<p>We make a couple of changes to make variable names easier to work
-with. Specifically removing “bike” from the <code>rideable_type</code>
-variable, removing “station” from the start and end station variables,
-and using “lon” to designate longitude.</p>
-<pre class="r"><code>bikes_1 &lt;- bikes %&gt;% 
-  mutate(rideable_type = str_remove(rideable_type, &quot;_bike$&quot;)) %&gt;% 
-  rename(start_lon = start_lng, end_lon = end_lng) %&gt;% 
-  rename_with(function(x) str_remove(x, &quot;_station&quot;))</code></pre>
-</div>
-<div id="extracting-time-information" class="section level3">
-<h3>Extracting time information</h3>
-<p>We perform several transformations to extract information from the
-time variables <code>started_at</code> and <code>ended_at</code>:</p>
+<div id="recommendations" class="section level3">
+<h3>Recommendations</h3>
+<p>In terms of recommendations to convert casual riders to members,
+these findings point to some ideas.</p>
 <ul>
-<li><p>extract trip duration and set duration to NA if it is less than
-0</p></li>
-<li><p>extract day of the week as <code>dow</code> and convert to an
-ordered factor, starting on Monday and ending on Sunday</p></li>
-<li><p>extract hour of the day as <code>hod</code>, using trip start
-time</p></li>
-<li><p>extract month as a numeric variable, as well as the abbreviated
-month (e.g. Jun, Jul, Aug)</p></li>
-<li><p>extract the trip date in YYYY-MM-DD format</p></li>
-<li><p>create <code>is_weekend</code> specifying if a trip took place on
-Saturday or Sunday</p></li>
-<li><p>create <code>is_fss</code> specifying if a trip took place on
-Friday - Sunday</p></li>
+<li><p>For social media marketing, it may be a good idea to target
+marketing to times when casual users are most active.</p></li>
+<li><p>It might also be a good idea to highlight the locations that
+casual riders tend to favor in social media marketing efforts, for
+example by notifying people of the availability of bikes at popular
+recreational destinations.</p></li>
+<li><p>Cyclistic might also consider creating a new type of membership
+that is limited to Summer months (i.e. a “semi-annual” membership), or
+which is limited to use in certain locations.</p></li>
 </ul>
-<pre class="r"><code>bikes_2 &lt;- bikes_1 %&gt;%  
-   mutate(dur = (ended_at - started_at), .after = ended_at) %&gt;% 
-   mutate(dur = replace(dur, dur &lt; 0, NA)) %&gt;% 
-   mutate(dow = wday(started_at, label = TRUE, abbr= TRUE), .after = dur) %&gt;% 
-   mutate(dow = factor(dow, ordered = TRUE, levels = c(&quot;Mon&quot;, &quot;Tue&quot;, &quot;Wed&quot;, &quot;Thu&quot;, &quot;Fri&quot;, &quot;Sat&quot;, &quot;Sun&quot;))) %&gt;% 
-   mutate(hod = hour(started_at), .after = dur) %&gt;% 
-   mutate(month = month(started_at), .after = dow) %&gt;% 
-   mutate(month_abb = month(started_at, label = TRUE, abbr = TRUE), .after = month) %&gt;% 
-   mutate(date = date(started_at), .after = ended_at) %&gt;% 
-   mutate(is_weekend = ifelse(dow %in% c(&quot;Sat&quot;, &quot;Sun&quot;), TRUE, FALSE), .after = month_abb) %&gt;% 
-   mutate(is_fss = ifelse(dow %in% c(&quot;Fri&quot;, &quot;Sat&quot;, &quot;Sun&quot;), TRUE, FALSE), .after = is_weekend)</code></pre>
-</div>
-<div id="joining-holiday-data" class="section level3">
-<h3>Joining holiday data</h3>
-<p>It’s reasonable to examine if ridership changes on holidays
-vs. non-holidays. We read in an excel sheet containing holiday data and
-join this with the main data frame. Finally, we write the transformed
-data frame into the <code>data</code> folder as
-<code>bikes_1.csv</code></p>
-<pre class="r"><code>library(readxl)
-hdays &lt;- read_excel(here(&quot;data&quot;, &quot;holidays.xlsx&quot;))
-glimpse(hdays)</code></pre>
-<pre><code>## Rows: 23
-## Columns: 2
-## $ date    &lt;dttm&gt; 2023-05-29, NA, NA, 2023-07-04, NA, NA, 2022-12-25, 2022-12-2…
-## $ holiday &lt;chr&gt; &quot;memorial day&quot;, NA, NA, &quot;July 4th&quot;, NA, NA, &quot;Christmas Day&quot;, &quot;…</code></pre>
-<pre class="r"><code>bikes_3 &lt;- bikes_2 %&gt;% 
-  left_join(hdays, by = &quot;date&quot;) %&gt;% 
-  mutate(is_holiday = ifelse(!is.na(holiday), &quot;yes&quot;, &quot;no&quot;)) %&gt;% 
-  mutate(holiday = ifelse(is.na(holiday), &quot;none&quot;, holiday))
-glimpse(bikes_3)</code></pre>
-<pre><code>## Rows: 5,652,827
-## Columns: 23
-## $ ride_id       &lt;chr&gt; &quot;BCC66FC6FAB27CC7&quot;, &quot;772AB67E902C180F&quot;, &quot;585EAD07FDEC015…
-## $ rideable_type &lt;chr&gt; &quot;electric&quot;, &quot;classic&quot;, &quot;classic&quot;, &quot;classic&quot;, &quot;classic&quot;, …
-## $ started_at    &lt;dttm&gt; 2022-11-10 06:21:55, 2022-11-04 07:31:55, 2022-11-21 17…
-## $ ended_at      &lt;dttm&gt; 2022-11-10 06:31:27, 2022-11-04 07:46:25, 2022-11-21 17…
-## $ date          &lt;dttm&gt; 2022-11-10, 2022-11-04, 2022-11-21, 2022-11-25, 2022-11…
-## $ dur           &lt;drtn&gt; 572 secs, 870 secs, 847 secs, 941 secs, 1106 secs, 708 …
-## $ hod           &lt;int&gt; 6, 7, 17, 17, 17, 14, 14, 20, 21, 20, 20, 0, 17, 15, 15,…
-## $ dow           &lt;ord&gt; Thu, Fri, Mon, Fri, Tue, Fri, Sun, Tue, Sun, Tue, Mon, S…
-## $ month         &lt;dbl&gt; 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, …
-## $ month_abb     &lt;ord&gt; Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, N…
-## $ is_weekend    &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, T…
-## $ is_fss        &lt;lgl&gt; FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, TRUE, FALSE, TRUE…
-## $ start_name    &lt;chr&gt; &quot;CANAL ST &amp; ADAMS ST&quot;, &quot;CANAL ST &amp; ADAMS ST&quot;, &quot;INDIANA A…
-## $ start_id      &lt;chr&gt; &quot;13011&quot;, &quot;13011&quot;, &quot;SL-005&quot;, &quot;SL-005&quot;, &quot;SL-005&quot;, &quot;13022&quot;,…
-## $ end_name      &lt;chr&gt; &quot;ST. CLAIR ST &amp; ERIE ST&quot;, &quot;ST. CLAIR ST &amp; ERIE ST&quot;, &quot;ST.…
-## $ end_id        &lt;chr&gt; &quot;13016&quot;, &quot;13016&quot;, &quot;13016&quot;, &quot;13016&quot;, &quot;13016&quot;, &quot;TA13060000…
-## $ start_lat     &lt;dbl&gt; 41.87940, 41.87926, 41.86789, 41.86789, 41.86789, 41.892…
-## $ start_lon     &lt;dbl&gt; -87.63985, -87.63990, -87.62304, -87.62304, -87.62304, -…
-## $ end_lat       &lt;dbl&gt; 41.89435, 41.89435, 41.89435, 41.89435, 41.89435, 41.888…
-## $ end_lon       &lt;dbl&gt; -87.62280, -87.62280, -87.62280, -87.62280, -87.62280, -…
-## $ member_casual &lt;chr&gt; &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;membe…
-## $ holiday       &lt;chr&gt; &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, …
-## $ is_holiday    &lt;chr&gt; &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;n…</code></pre>
-<pre class="r"><code>bikes_3 %&gt;%  write_csv(here(&quot;data&quot;, &quot;bikes_1.csv&quot;))</code></pre>
 </div>
 
 

@@ -1,0 +1,270 @@
+---
+title: "Mapping Ridership Data"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+```{r setup, include = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+
+```{r}
+source("00_libraries.r")
+library(htmlwidgets)
+library(leaflet)
+library(htmltools)
+```
+
+### Introduction
+
+Our random forest model indicated that **starting and ending stations** are highly
+important in distinguishing casual riders from members.
+
+In light of this, it makes sense to ask which specific stations are favored by 
+members and casual riders. We will do this by using the `leaflet` package to make
+interactive maps of start and end stations.  For each station, we will examine the 
+*total number of trips* and whether the station is *favored by members or casual riders*.
+
+We need to keep in mind that the dataset contains more records of member trips than 
+casual trips.  To understand the bias towards member or casual ridership at each station, 
+we will want to normalize data to the overall ratio of member:casual trips in the dataset.
+
+
+### Data preparation
+
+```{r, include = FALSE, cache = TRUE}
+bikes <- read_csv(here("data", "bikes_2.csv")) %>% na.omit()
+# bikes <- read_csv("C:/bikes_2.csv") %>%  na.omit()
+```
+
+Examine the bikes data frame.
+
+```{r, cache = TRUE}
+glimpse(bikes)
+```
+
+Begin by counting trips for each station by member/casual rider type.  We count
+start and end records separately, then row-bind them into a single table, using the 
+`type` variable to track starts and ends.
+
+```{r, cache = TRUE}
+start_counts <- bikes %>% count(start_name, member_casual) %>% 
+  arrange(desc(n)) %>% 
+  mutate(type = "start") %>% 
+  rename(name = start_name)
+
+end_counts <- bikes %>% count(end_name, member_casual) %>% 
+  arrange(desc(n)) %>% 
+  mutate(type = "end") %>% 
+  rename(name = end_name)
+
+stations <- bind_rows(start_counts, end_counts)
+```
+
+Next we create a wide-form data frame where member trips and casual trips are represented in separate columns.
+
+```{r, cache = TRUE}
+stations_w <- stations %>% 
+  pivot_wider(values_from = n, names_from = (member_casual))
+glimpse(stations_w)
+```
+We will need to account for the fact that member trips outnumber casual trips.  To
+do this, we start by calculating the ratio of member:casual trips in the entire dataset, 
+which will later be used to normalize data.
+
+```{r}
+ratio_member_casual <- bikes %>% 
+  count(member_casual) %>% 
+  {.$n[2] / .$n[1]}
+ratio_member_casual
+```
+
+Now we perform transformations to prepare the data frame for plotting:
+
+- calculate total trips and filter for total trips > 2000 to reduce overplotting.
+
+- calculate the raw ratio of casual to member trips, then normalize this to account for the 
+greater number of member trips in the dataset
+
+- create a variable indicating whether ridership is biased towards members or casual riders
+
+- calculate the log of the `normalized_ratio`.  This puts the data on a scale centered at 0 and improves the properties of the data for plotting
+
+- create additional variables to assist with labeling
+
+```{r}
+stations_w <- stations_w %>% 
+  mutate(total = member + casual) %>%
+  filter(total > 2000) %>% 
+  mutate(ratio = casual / member,
+         normalized_ratio = ratio * ratio_member_casual, 
+         bias_direction = ifelse(normalized_ratio <= 1, "member", "casual"),
+         lr = log(normalized_ratio),
+         bias = ifelse(bias_direction == "member", 1 / normalized_ratio,  normalized_ratio),
+         col = ifelse(bias_direction == "member", "80714e", "#4d9275"),
+         big = format(total, big.mark = ","))
+```
+
+Next we read in location data (mean latitude and longitude) that we previously calculated 
+for each station and join this to the trip count data.
+
+```{r}
+locations <- read_csv(here("results", "locations_summary.csv")) %>% 
+  select(name, mean_lat, mean_lon)
+
+stations_w <- stations_w %>% left_join(locations, by = "name")
+stations_w %>% mutate_if(is.numeric, ~ round(.x, 4)) %>%  DT::datatable()
+
+```
+
+After filtering for stations with > 2000 records, we can see how many start and end 
+records we have for plotting.
+
+```{r, echo = FALSE}
+tab <- stations_w %>% 
+  count(type) %>%  
+  arrange(desc(type)) %>% 
+  setNames(c("Type", "Count"))
+
+tab
+```
+
+
+
+
+### Mapping rider type bias by station
+
+With the data transformed we can finally put it onto a map!  
+
+We'll map trip starts and ends separately, beginning with starts.  For these maps we'll
+use size to represent overall trip count, and color to represent the degree of 
+casual:member ridership bias (log of the normalized ratio of casual:member trips).  A log ratio of 0 would represent a ratio of 1, i.e. an equal tendency towards ridership by members
+and casual riders.  A positive log ratio indicates a tendency towards casual ridership
+over member ridership.
+
+There are clear differences in how members and casual riders use stations 
+for starting and ending trips.  The stations most highly favored by casual riders are near 
+the lakeshore and/or adjacent to parks or other tourist destinations.  Some of these
+stations are among those with the highest number of total trips.  For example, 
+Streeter Drive & Grand Ave (near the Navy Pier) shows a 4.9 fold bias towards casual 
+ridership for trip starts and a 6.3 fold bias towards casual riders for trip ends,
+and has the most trip starts of any station.
+
+Stations showing a bias towards member trips are mostly downtown.
+
+Overall, the maps are consistent with the hypothesis that casual riders largely 
+represent tourists, while members include more commuters.  Commuters might include 
+people commuting to and from work or students.  For example, stations near 
+the Illinois Institute of Technology and University of Illinois 
+display a bias towards member ridership.
+
+```{r start_map, include = FALSE}
+starts_w <- stations_w %>% filter(type == "start")
+pal3 <- colorNumeric(
+  palette = "BrBG",
+  domain = -2:2,
+  reverse = FALSE
+)
+
+pal3_rev <- colorNumeric(
+  palette = "BrBG",
+  domain = -2:2,
+  reverse = TRUE
+)
+
+
+starts_map <- leaflet(options = leafletOptions(minZoom = 10, maxZoom = 17)) %>% 
+  addTiles() %>%
+  addCircleMarkers(
+    data = starts_w,
+    lng = ~ mean_lon,
+    lat = ~ mean_lat, 
+    radius = ~ total / 1000,
+    fillColor = ~ pal3(lr),
+    stroke = TRUE,
+    color = "black",  # stroke color
+    weight = 2, # stroke weight
+    fillOpacity = 0.8, 
+    popup = paste0("<b style = color:Tomato;>",starts_w$name, "</b>",  # set color of name
+                    "<br> <b>", starts_w$big, "</b> total trips",
+                    "<br><b>", round(starts_w$bias, 2), "</b>", "X bias towards", " <b style = color:", starts_w$col, ">", starts_w$bias_direction, "</b>", " ridership",
+                    "<br><b>", round(starts_w$lr, 1), "</b> log ratio of casual:member ridership"))   %>% 
+  addLegend("topright", 
+            pal = pal3_rev, 
+            values = c(-2:2), 
+            bins = 5, 
+            # labels = c(-2, -1, 0, 1, 2),
+            labFormat = labelFormat(transform = function(x) -1 * x),
+            # title = "Casual / member <br> ridership (log ratio)"
+            title = "Casual:Member <br>bias (log ratio)<br>") %>% 
+            # title = "Log of ratio <br>(casual / member) <br>ridership") %>% 
+  addControl("<h5>Rider types use different stations for starting trips</h5>", position = "bottomleft")
+starts_map
+
+```
+
+```{r}
+starts_map
+```
+
+
+
+```{r end_map, include = FALSE}
+ends_w <- stations_w %>% filter(type == "end")
+pal3 <- colorNumeric(
+  palette = "BrBG",
+  domain = -2:2,
+  reverse = FALSE
+)
+
+pal3_rev <- colorNumeric(
+  palette = "BrBG",
+  domain = -2:2,
+  reverse = TRUE
+)
+
+ends_map <- leaflet(options = leafletOptions(minZoom = 10, maxZoom = 17)) %>% 
+  addTiles() %>%
+  addCircleMarkers(
+    data = ends_w,
+    lng = ~ mean_lon,
+    lat = ~ mean_lat, 
+    radius = ~ total / 1000,
+    fillColor = ~ pal3(lr),
+    stroke = TRUE,
+    color = "black",  # stroke color
+    weight = 2, # stroke weight
+    fillOpacity = 0.8, 
+    popup = paste0("<b style = color:Tomato;>",ends_w$name, "</b>",  # set color of name
+                   "<br> <b>", ends_w$big, "</b> total trips",
+                   "<br><b>", round(ends_w$bias, 2), "</b>", "X bias towards", " <b style = color:", ends_w$col, ">", ends_w$bias_direction, "</b>", " ridership",
+                   "<br><b>", round(ends_w$lr, 1), "</b> log ratio of casual:member ridership"))   %>% 
+  addLegend("topright", 
+            pal = pal3_rev, 
+            values = c(-2:2), 
+            bins = 5, 
+            # labels = c(-2, -1, 0, 1, 2),
+            labFormat = labelFormat(transform = function(x) -1 * x),
+            # title = "Casual / member <br> ridership (log ratio)"
+            title = "Casual:Member <br>bias (log ratio)<br>") %>% 
+  # title = "Log of ratio <br>(casual / member) <br>ridership") %>% 
+  addControl("<h5>Rider types use different stations for ending trips</h5>", position = "bottomleft")
+ends_map
+```
+
+```{r}
+ends_map
+```
+
+

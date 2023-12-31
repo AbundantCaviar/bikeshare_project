@@ -13,7 +13,7 @@
 
 <meta name="date" content="2023-12-28" />
 
-<title>Initial Cleaning and Transformation</title>
+<title>Random Forest Fitting and Evaluation</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -591,7 +591,7 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Initial Cleaning and Transformation</h1>
+<h1 class="title toc-ignore">Random Forest Fitting and Evaluation</h1>
 <h4 class="author">Doug Antibus</h4>
 <h4 class="date">2023-12-28</h4>
 
@@ -599,202 +599,143 @@ display: none;
 
 <div id="TOC">
 <ul>
-<li><a href="#initial-checking-and-data-transformation" id="toc-initial-checking-and-data-transformation">Initial checking and
-data transformation</a></li>
-<li><a href="#summarizing-na-values" id="toc-summarizing-na-values">Summarizing NA values</a></li>
-<li><a href="#finding-excess-whitespace-in-character-variables" id="toc-finding-excess-whitespace-in-character-variables">Finding excess
-whitespace in character variables</a></li>
-<li><a href="#data-transformation" id="toc-data-transformation">Data
-Transformation</a></li>
-<li><a href="#variable-names" id="toc-variable-names">Variable
-names</a></li>
-<li><a href="#extracting-time-information" id="toc-extracting-time-information">Extracting time
-information</a></li>
-<li><a href="#joining-holiday-data" id="toc-joining-holiday-data">Joining holiday data</a></li>
+<li><a href="#model-fitting-and-evaluation" id="toc-model-fitting-and-evaluation">Model fitting and
+evaluation</a></li>
 </ul>
 </div>
 
-<div id="initial-checking-and-data-transformation" class="section level3">
-<h3>Initial checking and data transformation</h3>
-<p>We want to start by checking data integrity, e.g. whether columns are
-of the right type, missing values, naming consistency for categorical
-variables, and so on. I created a script of helper functions which will
-be useful throughout this analysis, so we start by sourcing these.</p>
-<pre class="r"><code>source(&quot;helper_functions.r&quot;)</code></pre>
-<p>The dataset may take ~ 30 seconds to load, therefore we only load it
-if it’s not already in the workspace.</p>
+<div id="model-fitting-and-evaluation" class="section level3">
+<h3>Model fitting and evaluation</h3>
+<p>After tuning several candidate random forest models using
+cross-validation with the training dataset, we identified a putative
+best combination of parameters for model fitting. The next step is to
+fit a model on the the complete training dataset using these parameters
+and evaluate fit on the test dataset.</p>
+<p>Read in the train and test data. Note that the test data were not
+used in random forest tuning, so these represent truly “unseen”
+data.</p>
+<pre class="r"><code>train &lt;- read_csv(here(&quot;data&quot;, &quot;train.csv&quot;))
+test &lt;- read_csv(here(&quot;data&quot;, &quot;test.csv&quot;))</code></pre>
+<p>As with model tuning, we’ll lump infrequent start and end stations
+together, but this time using a minimum frequency of 500. Additionally,
+we’ll find the intersect of <code>start_name</code> and
+<code>end_name</code> in the train and test datasets, and limit records
+to those having start and end names in the intersect.</p>
+<pre class="r"><code>train &lt;- train %&gt;% mutate(start_name = fct_lump_min(start_name, 500),
+                 end_name = fct_lump_min(end_name, 500))
+
+test &lt;- test %&gt;% mutate(start_name = fct_lump_min(start_name, 500),
+                          end_name = fct_lump_min(end_name, 500))</code></pre>
+<p>Filtering on the name intersects slightly decreases the number of
+records in the training datset and does not change the number of records
+in the test dataset.</p>
+<pre class="r"><code># find start and end intersects
+sn &lt;- intersect(unique(train$start_name), unique(test$start_name)) %&gt;% sort()
+en &lt;- intersect(unique(train$end_name), unique(test$end_name)) %&gt;% sort()
+
+# filter on intersects
+train &lt;- train %&gt;%  filter(start_name %in% sn, end_name %in% en)
+test &lt;- test %&gt;%  filter(start_name %in% sn, end_name %in% en)</code></pre>
+<pre><code>## # A tibble: 4 × 3
+##   dataset intersect records
+##   &lt;chr&gt;   &lt;chr&gt;       &lt;int&gt;
+## 1 train   before    2996630
+## 2 train   after     2887135
+## 3 test    before    1284270
+## 4 test    after     1284270</code></pre>
+<p>This leaves us with ~ 430 unique start and end stations, which is
+similar to the number of unique stations we had for model tuning.</p>
+<pre><code>## # A tibble: 4 × 3
+##   data  type  unique_values
+##   &lt;chr&gt; &lt;chr&gt;         &lt;int&gt;
+## 1 train start           432
+## 2 train end             435
+## 3 test  start           432
+## 4 test  end             435</code></pre>
+<p>Create the recipe, model specification, and workflow.</p>
+<pre class="r"><code>recipe &lt;- recipe(member_casual ~ ride_id + rideable_type + hod + dow + month + start_name 
+                 + end_name + is_weekend + is_holiday + round_trip, data = train) %&gt;%   
+          update_role(ride_id, new_role = &quot;id variable&quot;)
+
+rf_model &lt;- rand_forest(
+ mode = &quot;classification&quot;,
+ trees = 500,
+ mtry = 5,
+ min_n = 40) %&gt;% 
+ set_engine(&quot;ranger&quot;, num.threads = 12, importance = &quot;impurity&quot;)
+
+rf_wf &lt;- workflow() %&gt;%
+  add_model(rf_model) %&gt;%
+  add_recipe(recipe)</code></pre>
+<p>Next we fit the model on the complete training dataset and predict
+for both the test and train data using <code>broom::augment</code>.</p>
 <pre class="r"><code>tictoc::tic()
-if (exists(&quot;combined_data_raw&quot;)) bikes_raw &lt;- combined_data_raw
-if(!exists(&quot;bikes_raw&quot;)) bikes_raw &lt;- read_csv(here(&quot;data&quot;, &quot;combined_data_raw.csv&quot;)) else print(&quot;dataframe already exists&quot;)
-tictoc::toc()</code></pre>
-<pre><code>## 30.1 sec elapsed</code></pre>
-</div>
-<div id="summarizing-na-values" class="section level3">
-<h3>Summarizing NA values</h3>
-<p>We run the <code>na_summary</code> function from the helper functions
-to see how many missing values exist for each variable. This returns
-both the count and percentage of NA values. The <strong>station
-name</strong> and <strong>station id</strong> variables contain by far
-the most NA values (15-16%). There is a small percentage of NA values
-for the end latitude and end longitude variables. We will consider how
-to address NA values after doing some other data transformations.</p>
-<pre class="r"><code>bikes_raw %&gt;% na_summary()</code></pre>
-<pre><code>## # A tibble: 13 × 3
-##    variable           na_count na_pct
-##    &lt;chr&gt;                 &lt;int&gt;  &lt;dbl&gt;
-##  1 ride_id                   0  0    
-##  2 rideable_type             0  0    
-##  3 started_at                0  0    
-##  4 ended_at                  0  0    
-##  5 start_station_name   866243 15.3  
-##  6 start_station_id     866375 15.3  
-##  7 end_station_name     918796 16.3  
-##  8 end_station_id       918937 16.3  
-##  9 start_lat                 0  0    
-## 10 start_lng                 0  0    
-## 11 end_lat                6759  0.120
-## 12 end_lng                6759  0.120
-## 13 member_casual             0  0</code></pre>
-</div>
-<div id="finding-excess-whitespace-in-character-variables" class="section level3">
-<h3>Finding excess whitespace in character variables</h3>
-<p>It is important to find and remove excess whitespace in character
-variables. We run the helper function <code>find_whitespace</code> which
-detects leading and trailing spaces, and multiple consecutive
-spaces.</p>
-<pre class="r"><code>bikes_raw %&gt;% select_if(is.character) %&gt;% map_df(find_whitespace) %&gt;% pivot_longer(cols = everything())</code></pre>
-<pre><code>## # A tibble: 7 × 2
-##   name               value
-##   &lt;chr&gt;              &lt;int&gt;
-## 1 ride_id                0
-## 2 rideable_type          0
-## 3 start_station_name     3
-## 4 start_station_id       0
-## 5 end_station_name       2
-## 6 end_station_id         0
-## 7 member_casual          0</code></pre>
-<p>We can clean up the start and end station names and id’s as
-follows:</p>
-<ul>
-<li><p>convert all names to uppercase</p></li>
-<li><p>use <code>stringr::str_squish</code> to remove excess
-whitespace</p></li>
-</ul>
-<pre class="r"><code>bikes &lt;- bikes_raw %&gt;% 
-  mutate_at(c(&quot;start_station_name&quot;, &quot;start_station_id&quot;, &quot;end_station_name&quot;, &quot;end_station_id&quot;), str_to_upper) %&gt;% 
-  mutate_at(c(&quot;start_station_name&quot;, &quot;start_station_id&quot;, &quot;end_station_name&quot;, &quot;end_station_id&quot;), str_squish)</code></pre>
-<p>We can then check for excess whitespace again and find that all
-variables have no records with this issue.</p>
-<pre class="r"><code>bikes %&gt;% select_if(is.character) %&gt;% map_df(find_whitespace) %&gt;% pivot_longer(cols = everything())</code></pre>
-<pre><code>## # A tibble: 7 × 2
-##   name               value
-##   &lt;chr&gt;              &lt;int&gt;
-## 1 ride_id                0
-## 2 rideable_type          0
-## 3 start_station_name     0
-## 4 start_station_id       0
-## 5 end_station_name       0
-## 6 end_station_id         0
-## 7 member_casual          0</code></pre>
-<div id="checking-for-duplicated-records" class="section level4">
-<h4>Checking for duplicated records</h4>
-<p>We count the total number of duplicated records in the data frame and
-find none.</p>
-<pre class="r"><code>if(!exists(&quot;bike_duplicates&quot;)) bike_duplicates &lt;- sum(duplicated(bikes))
-bike_duplicates </code></pre>
-<pre><code>## [1] 0</code></pre>
-</div>
-</div>
-<div id="data-transformation" class="section level3">
-<h3>Data Transformation</h3>
-</div>
-<div id="variable-names" class="section level3">
-<h3>Variable names</h3>
-<p>We make a couple of changes to make variable names easier to work
-with. Specifically removing “bike” from the <code>rideable_type</code>
-variable, removing “station” from the start and end station variables,
-and using “lon” to designate longitude.</p>
-<pre class="r"><code>bikes_1 &lt;- bikes %&gt;% 
-  mutate(rideable_type = str_remove(rideable_type, &quot;_bike$&quot;)) %&gt;% 
-  rename(start_lon = start_lng, end_lon = end_lng) %&gt;% 
-  rename_with(function(x) str_remove(x, &quot;_station&quot;))</code></pre>
-</div>
-<div id="extracting-time-information" class="section level3">
-<h3>Extracting time information</h3>
-<p>We perform several transformations to extract information from the
-time variables <code>started_at</code> and <code>ended_at</code>:</p>
-<ul>
-<li><p>extract trip duration and set duration to NA if it is less than
-0</p></li>
-<li><p>extract day of the week as <code>dow</code> and convert to an
-ordered factor, starting on Monday and ending on Sunday</p></li>
-<li><p>extract hour of the day as <code>hod</code>, using trip start
-time</p></li>
-<li><p>extract month as a numeric variable, as well as the abbreviated
-month (e.g. Jun, Jul, Aug)</p></li>
-<li><p>extract the trip date in YYYY-MM-DD format</p></li>
-<li><p>create <code>is_weekend</code> specifying if a trip took place on
-Saturday or Sunday</p></li>
-<li><p>create <code>is_fss</code> specifying if a trip took place on
-Friday - Sunday</p></li>
-</ul>
-<pre class="r"><code>bikes_2 &lt;- bikes_1 %&gt;%  
-   mutate(dur = (ended_at - started_at), .after = ended_at) %&gt;% 
-   mutate(dur = replace(dur, dur &lt; 0, NA)) %&gt;% 
-   mutate(dow = wday(started_at, label = TRUE, abbr= TRUE), .after = dur) %&gt;% 
-   mutate(dow = factor(dow, ordered = TRUE, levels = c(&quot;Mon&quot;, &quot;Tue&quot;, &quot;Wed&quot;, &quot;Thu&quot;, &quot;Fri&quot;, &quot;Sat&quot;, &quot;Sun&quot;))) %&gt;% 
-   mutate(hod = hour(started_at), .after = dur) %&gt;% 
-   mutate(month = month(started_at), .after = dow) %&gt;% 
-   mutate(month_abb = month(started_at, label = TRUE, abbr = TRUE), .after = month) %&gt;% 
-   mutate(date = date(started_at), .after = ended_at) %&gt;% 
-   mutate(is_weekend = ifelse(dow %in% c(&quot;Sat&quot;, &quot;Sun&quot;), TRUE, FALSE), .after = month_abb) %&gt;% 
-   mutate(is_fss = ifelse(dow %in% c(&quot;Fri&quot;, &quot;Sat&quot;, &quot;Sun&quot;), TRUE, FALSE), .after = is_weekend)</code></pre>
-</div>
-<div id="joining-holiday-data" class="section level3">
-<h3>Joining holiday data</h3>
-<p>It’s reasonable to examine if ridership changes on holidays
-vs. non-holidays. We read in an excel sheet containing holiday data and
-join this with the main data frame. Finally, we write the transformed
-data frame into the <code>data</code> folder as
-<code>bikes_1.csv</code></p>
-<pre class="r"><code>library(readxl)
-hdays &lt;- read_excel(here(&quot;data&quot;, &quot;holidays.xlsx&quot;))
-glimpse(hdays)</code></pre>
-<pre><code>## Rows: 23
-## Columns: 2
-## $ date    &lt;dttm&gt; 2023-05-29, NA, NA, 2023-07-04, NA, NA, 2022-12-25, 2022-12-2…
-## $ holiday &lt;chr&gt; &quot;memorial day&quot;, NA, NA, &quot;July 4th&quot;, NA, NA, &quot;Christmas Day&quot;, &quot;…</code></pre>
-<pre class="r"><code>bikes_3 &lt;- bikes_2 %&gt;% 
-  left_join(hdays, by = &quot;date&quot;) %&gt;% 
-  mutate(is_holiday = ifelse(!is.na(holiday), &quot;yes&quot;, &quot;no&quot;)) %&gt;% 
-  mutate(holiday = ifelse(is.na(holiday), &quot;none&quot;, holiday))
-glimpse(bikes_3)</code></pre>
-<pre><code>## Rows: 5,652,827
-## Columns: 23
-## $ ride_id       &lt;chr&gt; &quot;BCC66FC6FAB27CC7&quot;, &quot;772AB67E902C180F&quot;, &quot;585EAD07FDEC015…
-## $ rideable_type &lt;chr&gt; &quot;electric&quot;, &quot;classic&quot;, &quot;classic&quot;, &quot;classic&quot;, &quot;classic&quot;, …
-## $ started_at    &lt;dttm&gt; 2022-11-10 06:21:55, 2022-11-04 07:31:55, 2022-11-21 17…
-## $ ended_at      &lt;dttm&gt; 2022-11-10 06:31:27, 2022-11-04 07:46:25, 2022-11-21 17…
-## $ date          &lt;dttm&gt; 2022-11-10, 2022-11-04, 2022-11-21, 2022-11-25, 2022-11…
-## $ dur           &lt;drtn&gt; 572 secs, 870 secs, 847 secs, 941 secs, 1106 secs, 708 …
-## $ hod           &lt;int&gt; 6, 7, 17, 17, 17, 14, 14, 20, 21, 20, 20, 0, 17, 15, 15,…
-## $ dow           &lt;ord&gt; Thu, Fri, Mon, Fri, Tue, Fri, Sun, Tue, Sun, Tue, Mon, S…
-## $ month         &lt;dbl&gt; 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, …
-## $ month_abb     &lt;ord&gt; Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, Nov, N…
-## $ is_weekend    &lt;lgl&gt; FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, TRUE, FALSE, T…
-## $ is_fss        &lt;lgl&gt; FALSE, TRUE, FALSE, TRUE, FALSE, TRUE, TRUE, FALSE, TRUE…
-## $ start_name    &lt;chr&gt; &quot;CANAL ST &amp; ADAMS ST&quot;, &quot;CANAL ST &amp; ADAMS ST&quot;, &quot;INDIANA A…
-## $ start_id      &lt;chr&gt; &quot;13011&quot;, &quot;13011&quot;, &quot;SL-005&quot;, &quot;SL-005&quot;, &quot;SL-005&quot;, &quot;13022&quot;,…
-## $ end_name      &lt;chr&gt; &quot;ST. CLAIR ST &amp; ERIE ST&quot;, &quot;ST. CLAIR ST &amp; ERIE ST&quot;, &quot;ST.…
-## $ end_id        &lt;chr&gt; &quot;13016&quot;, &quot;13016&quot;, &quot;13016&quot;, &quot;13016&quot;, &quot;13016&quot;, &quot;TA13060000…
-## $ start_lat     &lt;dbl&gt; 41.87940, 41.87926, 41.86789, 41.86789, 41.86789, 41.892…
-## $ start_lon     &lt;dbl&gt; -87.63985, -87.63990, -87.62304, -87.62304, -87.62304, -…
-## $ end_lat       &lt;dbl&gt; 41.89435, 41.89435, 41.89435, 41.89435, 41.89435, 41.888…
-## $ end_lon       &lt;dbl&gt; -87.62280, -87.62280, -87.62280, -87.62280, -87.62280, -…
-## $ member_casual &lt;chr&gt; &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;member&quot;, &quot;membe…
-## $ holiday       &lt;chr&gt; &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, &quot;none&quot;, …
-## $ is_holiday    &lt;chr&gt; &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;no&quot;, &quot;n…</code></pre>
-<pre class="r"><code>bikes_3 %&gt;%  write_csv(here(&quot;data&quot;, &quot;bikes_1.csv&quot;))</code></pre>
+fit &lt;- rf_wf %&gt;% fit(train)
+tictoc::toc()
+
+test_augmented &lt;- fit %&gt;% broom::augment(test) %&gt;% 
+  mutate(member = factor(ifelse(member_casual == &quot;casual&quot;, 1, 0)))
+
+train_augmented &lt;- fit %&gt;% broom::augment(train) %&gt;% 
+  mutate(member = factor(ifelse(member_casual == &quot;casual&quot;, 1, 0)))</code></pre>
+<p>We calculate accuracy and ROC AUC for both the training and test
+predictions, and put these into a table.</p>
+<pre class="r"><code>train_auc &lt;- roc_auc(train_augmented, member, .pred_member) %&gt;% pull(.estimate)
+test_auc &lt;- roc_auc(test_augmented, member, .pred_member)  %&gt;% pull(.estimate)
+
+test_accuracy &lt;- test_augmented %&gt;% 
+  mutate(.pred_mem = factor(ifelse(.pred_class == &quot;casual&quot;, 1, 0))) %&gt;% 
+  accuracy(member, .pred_mem) %&gt;% pull(.estimate)
+
+train_accuracy &lt;- train_augmented %&gt;% 
+  mutate(.pred_mem = factor(ifelse(.pred_class == &quot;casual&quot;, 1, 0))) %&gt;% 
+  accuracy(member, .pred_mem) %&gt;% pull(.estimate)
+
+metrics_table &lt;- tibble(
+  data = rep(c(&quot;train&quot;, &quot;test&quot;), each = 2),
+  metric = rep(c(&quot;accuracy&quot;, &quot;AUC&quot;), 2),
+  value = c(train_accuracy, train_auc, test_accuracy, test_auc)
+  )
+
+metrics_table %&gt;% write_csv(here(&quot;results&quot;, &quot;metrics_table_5_40.csv&quot;))</code></pre>
+<p>The model seems to have been overfit somewhat on the training data,
+since training accuracy and ROC AUC are both higher than the
+corresponding test metrics. However test AUC is still ~ 0.75, which
+shows that our model has decent predictive value.</p>
+<pre class="r"><code>met_table &lt;- read_csv(here(&quot;results&quot;, &quot;metrics_table_5_40.csv&quot;))
+met_table</code></pre>
+<pre><code>## # A tibble: 4 × 3
+##   data  metric   value
+##   &lt;chr&gt; &lt;chr&gt;    &lt;dbl&gt;
+## 1 train accuracy 0.793
+## 2 train AUC      0.892
+## 3 test  accuracy 0.715
+## 4 test  AUC      0.748</code></pre>
+<p>Plotting the training and testing ROC curves, we see that the train
+ROC curve looks markedly better than the test ROC curve, although the
+test curve is clearly more predictive than the slope = 1 baseline.</p>
+<p><strong>Training</strong> ROC curve</p>
+<pre class="r"><code>knitr::include_graphics(here(&quot;images&quot;, &quot;train_roc_curve.png&quot;), dpi = 100)</code></pre>
+<p><img src="data:image/png;base64,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" width="461" /></p>
+<p><strong>Testing</strong> ROC curve</p>
+<pre class="r"><code>knitr::include_graphics(here(&quot;images&quot;, &quot;test_roc_curve.png&quot;), dpi = 100)</code></pre>
+<p><img src="data:image/png;base64,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" width="461" /></p>
+<p>Finally, we examine variable importance, which indicates that start
+and end stations are the most important variables. We didn’t do a
+detailed examination of start and end stations during EDA, but we will
+examine these with maps next.</p>
+<p>Other important variables match findings from EDA. For example, we
+found that members and casual users displayed different patterns of
+hourly (<code>hod</code>) trip start times. We also saw that members and
+casual users differed in the <code>rideable_type</code> of bikes used,
+and casual users tended to take more trips on weekends during
+late-spring and summer months.</p>
+<p>These findings from the model add credibility to what we discovered
+during EDA and will provide guidance for <strong>Cyclistic</strong> in
+developing marketing strategies aimed at converting casual users into
+membership holders.</p>
+<pre class="r"><code>knitr::include_graphics(here(&quot;images&quot;, &quot;model_vip.png&quot;), dpi = 100)</code></pre>
+<p><img src="data:image/png;base64,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" width="525" /></p>
 </div>
 
 

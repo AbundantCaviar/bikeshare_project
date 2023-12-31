@@ -1,0 +1,240 @@
+---
+title: "Random Forest Setup and Tuning"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+source("00_libraries.r")
+```
+
+### Defining and tuning a random forest model
+
+In this section we are going to prepare the data for use in a random forest model and
+attempt to tune parameters to optimize the model fit.  After tuning, we will select the best parameters, fit the model on the **training** dataset, then evaluate fit on the **test** dataset.
+
+I choose to use a random forest model for a few reasons:
+
+- random forest is relatively computationally efficient, which will be important
+given our large dataset
+
+- random forest does not require dummy encoding or one-hot encoding of categorical
+variables, which will help reduce memory usage
+
+- we can extract variable importance scores from the random forest model.  This is 
+important given that our objective is to *understand variables distinguishing members
+and casuals* rather than to simply make the most accurate model possible.
+
+We will use the `tidymodels` package for model tuning and fitting.  The following variables
+will be used to predict whether trips are taken by members or casual riders.
+
+- start and end station names
+
+- `rideable type` i.e. the type of bike for each trip
+
+- `hod` - hour when trips started
+
+- `dow` - day of the week for trips\
+
+- `month` when the trip was taken
+
+- `is_weekend` and `is_holiday` - whether trips are on weekends or holidays, respectively
+
+- whether the trip taken is a `round_trip`
+
+
+
+### Data preparation
+
+We'll read in the most recent dataset and immediately discard rows containing `NA`
+values.  This leaves us with 4.28 million records.
+
+```{r import, cache = TRUE}
+bikes <- read_csv(here("data", "bikes_2.csv")) %>% na.omit()
+nrow(bikes) %>% format(big.mark = ",")
+```
+
+The first step is split the data into training and test sets.  We will use 70% of the
+data for training and reserve 30% for testing.
+
+```{r split, cache = TRUE}
+set.seed(123)
+split <- initial_split(bikes, prop = 0.7)
+train <- training(split)
+test <- testing(split)
+```
+
+Write the test and train datasets to files if these don't already exist.
+
+```{r write, cache = TRUE}
+file_exists(here("data", "train.csv"))
+if (!file_exists(here("data", "train.csv"))) { 
+  train %>% write_csv(here("data", "train.csv")) 
+}
+
+if (!file_exists(here("data", "test.csv"))) { 
+  test %>% write_csv(here("data", "test.csv"))
+}
+
+```
+
+Model tuning will require us to fit and evaluate a total of 100 models (20 parameter 
+combinations for each of 5 cross-validation folds).  To allow tuning to go faster, we will take a sub-sample with equal numbers of members and casual riders, with a total size of 200,000 records.
+
+```{r sample, cache = TRUE}
+set.seed(123)
+spl <- train %>% group_by(member_casual) %>%
+  slice_sample(n = 100000) %>%
+  ungroup()
+nrow(spl)
+```
+In our dataset, we have many start and end stations which are only represented by 
+one or a few records.  This could pose a problem for model tuning: if a station
+does not appear in the data used to fit a model, we might not be able to make predictions
+during cross-validation.  To address this,  we will "lump" start and end station names 
+into an "other" category for names appearing < 100 times in the dataset.
+
+```{r lump, cache = TRUE}
+spl <- spl %>% 
+  mutate(start_name = fct_lump_min(start_name, 100),
+         end_name = fct_lump_min(end_name, 100))
+```
+
+Next we create a cross-validation object from the sample.
+
+```{r}
+cv <- vfold_cv(spl, v = 5)
+```
+
+### Defining a workflow
+
+
+Define a recipe with predictors as described above and member_casual as the outcome.  We
+specify that `ride_id` is an id variable instead of a predictor.
+
+```{r}
+recipe <- recipe(member_casual ~ ride_id + rideable_type + hod + dow + month + start_name 
+                 + end_name + is_weekend + is_holiday + round_trip, data = spl) %>%   
+          update_role(ride_id, new_role = "id variable")
+```
+
+Next we define a random forest model, then we place the model and recipe into a 
+workflow object.
+
+The parameters we will tune are:
+
+- `mtry`: the number of randomly chosen predictors used to build trees.  It helps
+to manually set the range for mtry since this depends on the number of predictors 
+in the recipe.  One common recommendation is to use mtry equal to the square root of 
+the number of predictors, so we will try bounding mtry between 2 and 7.
+
+- `min_n`: the minimum node size for trees
+
+```{r wf, cache = TRUE}
+rf_model <- rand_forest(
+  mode = "classification",
+  trees = 500,
+  mtry = tune(),
+  min_n = tune()) %>%
+  set_engine("ranger", num.threads = 12, importance = "impurity")
+
+rf_wf <- workflow() %>%
+  add_model(rf_model) %>%
+  # important that we are using recipe_2, which includes start name and end_name
+  add_recipe(recipe)
+
+rf_params <- rf_wf %>% extract_parameter_set_dials()
+rf_params <- rf_params %>% update(mtry = mtry(range = c(2, 7)))
+```
+
+Finally, we tune the model using 20 parameter combinations.  For metrics we track
+overall accuracy and the area under the ROC curve.
+
+```{r, eval = FALSE, cache = TRUE }
+tictoc::tic()
+set.seed(123)
+rf_res <- tune_grid(rf_wf,
+                    resamples = cv,
+                    param_info  = rf_params,
+                    grid = 20,
+                    metrics = metric_set(accuracy, roc_auc),
+                    control = control_grid(verbose = TRUE, parallel_over = "resamples")
+)
+tictoc::toc()
+
+metrics <- rf_res %>% collect_metrics(summarize = TRUE)
+metrics %>% write_csv(here("results", "metrics_20grid_200k_records.csv"))
+```
+
+
+
+### Examining metrics for parameter combinations
+
+```{r}
+metrics <- read_csv(here("results", "metrics_20grid_200k_records.csv")) %>% 
+  group_by(.metric) %>% 
+  arrange(desc(mean))
+# glimpse(metrics)
+
+metrics %>% mutate(across(c("mean", "std_err"), ~ round(.x, 4))) %>% DT::datatable()
+```
+
+We plot ROC AUC and accuracy over mtry and min_n separately, using open red triangles
+to visualize the mean for each parameter value.  Values of min_n over 35 seem to
+give the best performance.
+
+The "baseline" accuracy for our model is 0.5, since we sampled equal numbers of member
+and casual trips.  Our tuning accuracy is between 0.62 - 0.64, so the models give
+some predictive value, although predictions could be better.
+
+```{r}
+metrics_l <- metrics %>% 
+  mutate(model = row_number()) %>% 
+  pivot_longer(mtry:min_n, names_to = "parameter") 
+
+metrics_l %>%  
+  filter(.metric == "roc_auc") %>% 
+  ggplot(aes(value, mean)) +
+  geom_point() +
+  facet_wrap(~ parameter, nrow = 2, scales = "free_x") +
+  labs(y = "ROC AUC", x = "parameter value") +
+  stat_summary(fun = "mean", color = "red", geom = "point", shape = 2, size = 4) +
+  scale_y_continuous(limits = c(0.68, 0.7))
+```
+
+```{r}
+metrics_l %>%  
+  filter(.metric == "accuracy") %>% 
+  ggplot(aes(value, mean)) +
+  geom_point() +
+  facet_wrap(~ parameter, nrow = 2, scales = "free_x") +
+  labs(y = "accuracy", x = "parameter value") +
+  stat_summary(fun = "mean", color = "red", geom = "point", shape = 2, size = 4) +
+  scale_y_continuous(limits = c(0.62, 0.64))
+```
+
+We also visualize the simultaneous effect of mtry and min_n on ROC AUC.  The best performance is achieved with mtry from 4- 6 and min_n > 30.  Overall ROC AUC spans a fairly narrow range of ~ 0.012 units.  We will choose *mtry = 5 and min_n = 40* for the final model fit and evaluation.
+
+```{r}
+metrics %>%  
+	filter(.metric == "roc_auc") %>% 
+	ggplot(aes(mtry, min_n, fill = mean)) +
+	geom_raster() +
+	scale_fill_viridis() +
+  labs(fill = "ROC AUC") +
+  theme_minimal() +
+  labs(title = "Joint effect of mtry and min_n on ROC AUC")
+```
+
+
+

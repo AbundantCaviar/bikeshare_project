@@ -1,0 +1,210 @@
+---
+title: "Random Forest Fitting and Evaluation"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+source("00_libraries.r")
+```
+
+### Model fitting and evaluation
+
+After tuning several candidate random forest models using cross-validation with
+the training dataset, we identified a putative best combination of parameters
+for model fitting.  The next step is to fit a model on the the complete training
+dataset using these parameters and evaluate fit on the test dataset.
+
+Read in the train and test data.  Note that the test data were not
+used in random forest tuning, so these represent truly "unseen" data.
+
+```{r, cache = TRUE}
+train <- read_csv(here("data", "train.csv"))
+test <- read_csv(here("data", "test.csv"))
+```
+
+As with model tuning, we'll lump infrequent start and end stations together,
+but this time using a minimum frequency of 500.  Additionally,
+we'll find the intersect of `start_name` and `end_name` in the train and test
+datasets, and limit records to those having start and end names in the intersect.
+
+```{r, cache = TRUE}
+train <- train %>% mutate(start_name = fct_lump_min(start_name, 500),
+                 end_name = fct_lump_min(end_name, 500))
+
+test <- test %>% mutate(start_name = fct_lump_min(start_name, 500),
+                          end_name = fct_lump_min(end_name, 500))
+
+```
+
+Filtering on the name intersects slightly decreases the number of records in the 
+training datset and does not change the number of records in the test dataset.
+
+```{r, echo = FALSE}
+a <- nrow(train)
+b <- nrow(test)
+```
+
+```{r}
+# find start and end intersects
+sn <- intersect(unique(train$start_name), unique(test$start_name)) %>% sort()
+en <- intersect(unique(train$end_name), unique(test$end_name)) %>% sort()
+
+# filter on intersects
+train <- train %>%  filter(start_name %in% sn, end_name %in% en)
+test <- test %>%  filter(start_name %in% sn, end_name %in% en)
+```
+
+```{r, echo = FALSE}
+c <- nrow(train)
+d <- nrow(test)
+tib <- tibble(dataset = c("train", "train", "test", "test"),
+               intersect = rep(c("before", "after"), 2),
+               records = c(a, c, b, d)
+               )
+tib
+```
+
+This leaves us with ~ 430 unique start and end stations, which is similar to the 
+number of unique stations we had for model tuning.
+
+```{r, echo = FALSE, cache = TRUE}
+e <- length(unique(train$start_name))
+f <- length(unique(train$end_name))
+g <- length(unique(test$start_name))
+h <- length(unique(test$end_name))
+```
+
+```{r, echo = FALSE, cache = TRUE}
+tib2 <- tibble(data = rep(c("train", "test"), each = 2),
+               type = rep(c("start", "end"), 2),
+               unique_values = c(e, f, g, h)
+               )
+tib2
+
+```
+Create the recipe, model specification, and workflow.
+
+```{r}
+recipe <- recipe(member_casual ~ ride_id + rideable_type + hod + dow + month + start_name 
+                 + end_name + is_weekend + is_holiday + round_trip, data = train) %>%   
+          update_role(ride_id, new_role = "id variable")
+
+rf_model <- rand_forest(
+ mode = "classification",
+ trees = 500,
+ mtry = 5,
+ min_n = 40) %>% 
+ set_engine("ranger", num.threads = 12, importance = "impurity")
+
+rf_wf <- workflow() %>%
+  add_model(rf_model) %>%
+  add_recipe(recipe)
+```
+
+Next we fit the model on the complete training dataset and predict for both 
+the test and train data using `broom::augment`.
+
+```{r, eval = FALSE}
+tictoc::tic()
+fit <- rf_wf %>% fit(train)
+tictoc::toc()
+
+test_augmented <- fit %>% broom::augment(test) %>% 
+  mutate(member = factor(ifelse(member_casual == "casual", 1, 0)))
+
+train_augmented <- fit %>% broom::augment(train) %>% 
+  mutate(member = factor(ifelse(member_casual == "casual", 1, 0)))
+```
+
+We calculate accuracy and ROC AUC for both the training and test predictions,
+and put these into a table.
+
+```{r, eval = FALSE}
+train_auc <- roc_auc(train_augmented, member, .pred_member) %>% pull(.estimate)
+test_auc <- roc_auc(test_augmented, member, .pred_member)  %>% pull(.estimate)
+
+test_accuracy <- test_augmented %>% 
+  mutate(.pred_mem = factor(ifelse(.pred_class == "casual", 1, 0))) %>% 
+  accuracy(member, .pred_mem) %>% pull(.estimate)
+
+train_accuracy <- train_augmented %>% 
+  mutate(.pred_mem = factor(ifelse(.pred_class == "casual", 1, 0))) %>% 
+  accuracy(member, .pred_mem) %>% pull(.estimate)
+
+metrics_table <- tibble(
+  data = rep(c("train", "test"), each = 2),
+  metric = rep(c("accuracy", "AUC"), 2),
+  value = c(train_accuracy, train_auc, test_accuracy, test_auc)
+  )
+
+metrics_table %>% write_csv(here("results", "metrics_table_5_40.csv"))
+```
+
+The model seems to have been overfit somewhat on the training data, since training
+accuracy and ROC AUC are both higher than the corresponding test metrics.  However
+test AUC is still ~ 0.75, which shows that our model has decent predictive value.
+
+
+```{r}
+met_table <- read_csv(here("results", "metrics_table_5_40.csv"))
+met_table
+```
+
+Plotting the training and testing ROC curves, we see that the train
+ROC curve looks markedly better than the test ROC curve, although the test curve
+is clearly more predictive than the slope = 1 baseline.
+
+
+```{r, eval = FALSE, echo = FALSE}
+test_curve <- roc_curve(test_augmented, member, .pred_member) 
+test_curve %>%  autoplot()
+
+train_curve <- roc_curve(train_augmented, member, .pred_member)
+train_curve %>% autoplot()
+```
+
+**Training** ROC curve
+
+```{r}
+knitr::include_graphics(here("images", "train_roc_curve.png"), dpi = 100)
+```
+
+**Testing** ROC curve
+
+```{r}
+knitr::include_graphics(here("images", "test_roc_curve.png"), dpi = 100)
+```
+
+Finally, we examine variable importance, which indicates that start and end stations 
+are the most important variables.  We didn't do a detailed examination of start and end stations
+during EDA, but we will examine these with maps next.
+
+Other important variables match findings from EDA.  For example, we found that members
+and casual users displayed different patterns of hourly (`hod`) trip start times.  We
+also saw that members and casual users differed in the `rideable_type` of bikes used,
+and casual users tended to take more trips on weekends during late-spring and summer months.
+
+These findings from the model add credibility to what we discovered during EDA and
+will provide guidance for **Cyclistic** in developing marketing strategies aimed
+at converting casual users into membership holders.
+
+```{r, eval = FALSE, echo = FALSE}
+fit %>% extract_fit_parsnip() %>%  vip::vip()
+object.size(fit) %>% format(units = "Mb")
+```
+
+```{r}
+knitr::include_graphics(here("images", "model_vip.png"), dpi = 100)
+```
+

@@ -614,7 +614,9 @@ source(&quot;helper_functions.r&quot;)</code></pre>
 <h3>Checking distribution of NA values</h3>
 <p>Read in the <code>bikes_1</code> dataframe that was the product of
 the previous file</p>
-<pre><code>## Rows: 5,652,822
+<pre class="r"><code>bikes &lt;- read_csv(here(&quot;data&quot;, &quot;bikes_1.csv&quot;))
+glimpse(bikes)</code></pre>
+<pre><code>## Rows: 5,652,827
 ## Columns: 23
 ## $ ride_id       &lt;chr&gt; &quot;BCC66FC6FAB27CC7&quot;, &quot;772AB67E902C180F&quot;, &quot;585EAD07FDEC015…
 ## $ rideable_type &lt;chr&gt; &quot;electric&quot;, &quot;classic&quot;, &quot;classic&quot;, &quot;classic&quot;, &quot;classic&quot;, …
@@ -649,12 +651,12 @@ na_counts %&gt;% print(n = 30)</code></pre>
 <pre><code>## # A tibble: 23 × 3
 ##    variable      na_count   na_pct
 ##    &lt;chr&gt;            &lt;int&gt;    &lt;dbl&gt;
-##  1 end_id          918933 16.3    
-##  2 end_name        918792 16.3    
+##  1 end_id          918937 16.3    
+##  2 end_name        918796 16.3    
 ##  3 start_id        866375 15.3    
 ##  4 start_name      866243 15.3    
-##  5 end_lat           6755  0.119  
-##  6 end_lon           6755  0.119  
+##  5 end_lat           6759  0.120  
+##  6 end_lon           6759  0.120  
 ##  7 dur                239  0.00423
 ##  8 ride_id              0  0      
 ##  9 rideable_type        0  0      
@@ -694,7 +696,7 @@ day of week, and member vs. casual riders.</p>
 ##  7     7 767650   122943   16.0
 ##  8     8 771693   118919   15.4
 ##  9     9 666371   101312   15.2
-## 10    10 537108    84412   15.7
+## 10    10 537113    84412   15.7
 ## 11    11 337735    51957   15.4
 ## 12    12 181806    29283   16.1</code></pre>
 <pre class="r"><code>bikes %&gt;% summarize_na_by_var(month, end_name)</code></pre>
@@ -710,21 +712,21 @@ day of week, and member vs. casual riders.</p>
 ##  7     7 767650   130304   17.0
 ##  8     8 771693   125568   16.3
 ##  9     9 666371   107291   16.1
-## 10    10 537108    89249   16.6
+## 10    10 537113    89253   16.6
 ## 11    11 337735    54259   16.1
 ## 12    12 181806    31158   17.1</code></pre>
 <pre class="r"><code>bikes %&gt;% summarize_na_by_var(member_casual, start_name)</code></pre>
 <pre><code>## # A tibble: 2 × 4
 ##   member_casual       n na_count na_pct
 ##   &lt;chr&gt;           &lt;int&gt;    &lt;int&gt;  &lt;dbl&gt;
-## 1 casual        2054777   326259   15.9
-## 2 member        3598045   539984   15.0</code></pre>
+## 1 casual        2054781   326259   15.9
+## 2 member        3598046   539984   15.0</code></pre>
 <pre class="r"><code>bikes %&gt;% summarize_na_by_var(member_casual, end_name)</code></pre>
 <pre><code>## # A tibble: 2 × 4
 ##   member_casual       n na_count na_pct
 ##   &lt;chr&gt;           &lt;int&gt;    &lt;int&gt;  &lt;dbl&gt;
-## 1 casual        2054777   381475   18.6
-## 2 member        3598045   537317   14.9</code></pre>
+## 1 casual        2054781   381478   18.6
+## 2 member        3598046   537318   14.9</code></pre>
 <pre class="r"><code>bikes %&gt;% summarize_na_by_var(dow, start_name)</code></pre>
 <pre><code>## # A tibble: 7 × 4
 ##   dow        n na_count na_pct
@@ -734,7 +736,7 @@ day of week, and member vs. casual riders.</p>
 ## 3 Sat   858700   139814   16.3
 ## 4 Sun   730673   115757   15.8
 ## 5 Thu   847398   127363   15.0
-## 6 Tue   834795   121921   14.6
+## 6 Tue   834800   121921   14.6
 ## 7 Wed   830258   123546   14.9</code></pre>
 <pre class="r"><code>bikes %&gt;% summarize_na_by_var(dow, end_name)</code></pre>
 <pre><code>## # A tibble: 7 × 4
@@ -745,7 +747,7 @@ day of week, and member vs. casual riders.</p>
 ## 3 Sat   858700   148664   17.3
 ## 4 Sun   730673   121149   16.6
 ## 5 Thu   847398   136164   16.1
-## 6 Tue   834795   129326   15.5
+## 6 Tue   834800   129330   15.5
 ## 7 Wed   830258   131454   15.8</code></pre>
 <p>Overall, there are no dramatic differences in the occurrence of NA
 values for the variables examined. For month and day of week, NA values

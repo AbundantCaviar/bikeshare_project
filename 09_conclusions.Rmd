@@ -1,0 +1,67 @@
+---
+title: "Conclusions and Recommendations"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(cache = TRUE)
+source("00_libraries.r")
+```
+
+### Project Goals
+
+The goal of this project was the help the fictional bike-share `r icon_style(fontawesome("bicycle", style = "solid"), scale = 2, fill = "purple")` company **Cyclistic** understand differences in how **members** and **casual users** of their bike-share
+service differ in patterns of ridership.  This was in order to improve their marketing
+strategy (in particular social media marketing) with the aim of converting more
+casual users to members.
+
+
+### Outcomes and Findings
+
+In this analysis I obtained relevant data, cleaned it, performed EDA, modeling, and
+visualization in order to understand differences in the behavior of members and 
+casual riders.  Some of the key findings included:
+
+- Casual users tend to start and end trips at different stations than members.  Many
+of the stations favored by casual users are popular recreational or tourist destinations
+
+- Casual users show more activity on weekends, while members show more activity
+on weekdays.
+
+- casual users show a strong preference for taking trips during late Spring and Summer,
+while members also show this preference but to a lesser degree.
+
+Overall, the data are consistent with the hypothesis that casual users are tourists
+or other itinerant users, while members are using the service to commute to and from
+work or school.  This makes sense, as users who regularly commute would see more 
+value in buying an annual pass.
+
+
+### Recommendations
+
+In terms of recommendations to convert casual riders to members, these findings point
+to some ideas.
+
+- For social media marketing, it may be a good idea to target marketing to times when
+casual users are most active.
+
+- It might also be a good idea to highlight the locations that casual riders tend to favor 
+in social media marketing efforts, for example by notifying people of the availability
+of bikes at popular recreational destinations.
+
+- Cyclistic might also consider creating a new type of membership that is limited to
+Summer months (i.e. a "semi-annual" membership), or which is limited to use in certain locations.
+
+

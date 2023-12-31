@@ -11,8 +11,7 @@ output:
       bootswatch: pulse
 ---
 
-
-```{r setup, include=FALSE}
+```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(warning = FALSE)
@@ -26,17 +25,17 @@ type, missing values, naming consistency for categorical variables, and so on.  
 a script of helper functions which will be useful throughout this analysis, so we start
 by sourcing these.
 
-```{r, echo = FALSE, message = FALSE}
+```{r, message = FALSE}
 source("helper_functions.r")
 ```
 
-Note that the dataset may take ~ 30 seconds to load, therefore we only load it if 
+The dataset may take ~ 30 seconds to load, therefore we only load it if 
 it's not already in the workspace.
 
-```{r reading}
+```{r import, cache=TRUE}
 tictoc::tic()
 if (exists("combined_data_raw")) bikes_raw <- combined_data_raw
-if(!exists("bikes_raw")) bikes_raw <- read_csv(here("raw_data", "combined_data_raw.csv")) else print("dataframe already exists")
+if(!exists("bikes_raw")) bikes_raw <- read_csv(here("data", "combined_data_raw.csv")) else print("dataframe already exists")
 tictoc::toc()
 ```
 
@@ -44,9 +43,8 @@ tictoc::toc()
 ### Summarizing NA values
 
 We run the `na_summary` function from the helper functions to see how many missing
-values exist for each variable.  This returns both the count and percentage of NA values.  We can see that **station name** and **station id** variables contain by
-far the most NA values (15-16%).  There is a small percentage of NA values for the end latitude and end longitude variables.  We will consider how to address NA values 
-after doing some other initial transformations.
+values exist for each variable.  This returns both the count and percentage of NA values.  The **station name** and **station id** variables contain by
+far the most NA values (15-16%).  There is a small percentage of NA values for the end latitude and end longitude variables.  We will consider how to address NA values after doing some other data transformations.
 
 ```{r na}
 bikes_raw %>% na_summary()
@@ -59,7 +57,7 @@ run the helper function ` find_whitespace` which detects leading and trailing sp
 and multiple consecutive spaces.
 
 
-```{r whitespace}
+```{r whitespace, cahce = TRUE}
 bikes_raw %>% select_if(is.character) %>% map_df(find_whitespace) %>% pivot_longer(cols = everything())
 ```
 
@@ -74,31 +72,30 @@ We can clean up the start and end station names and id's as follows:
 bikes <- bikes_raw %>% 
   mutate_at(c("start_station_name", "start_station_id", "end_station_name", "end_station_id"), str_to_upper) %>% 
   mutate_at(c("start_station_name", "start_station_id", "end_station_name", "end_station_id"), str_squish)
-glimpse(bikes)
 ```
 
 We can then check for excess whitespace again and find that all variables have 
 no records with this issue.
 
-```{r}
-bikes %>% select_if(is.character) %>% map_df(find_whitespace)
+```{r, cache = TRUE}
+bikes %>% select_if(is.character) %>% map_df(find_whitespace) %>% pivot_longer(cols = everything())
 ```
 
 #### Checking for duplicated records
 
 We count the total number of duplicated records in the data frame and find none. 
 
-```{r}
-if(!exists("bike_dups")) bike_dups <- sum(duplicated(bikes))
-bike_dups 
+```{r, cache=TRUE}
+if(!exists("bike_duplicates")) bike_duplicates <- sum(duplicated(bikes))
+bike_duplicates 
 ```
 
 ### Data Transformation
 
-### Cleaning up variable names 
+### Variable names 
 
 We make a couple of changes to make variable names easier to work with.  Specifically
-removing "bike" fomr the `rideable_type` variable, removing "station" from the 
+removing "bike" from the `rideable_type` variable, removing "station" from the 
 start and end station variables, and using "lon" to designate longitude.
 
 ```{r}
@@ -141,8 +138,6 @@ bikes_2 <- bikes_1 %>%
    mutate(date = date(started_at), .after = ended_at) %>% 
    mutate(is_weekend = ifelse(dow %in% c("Sat", "Sun"), TRUE, FALSE), .after = month_abb) %>% 
    mutate(is_fss = ifelse(dow %in% c("Fri", "Sat", "Sun"), TRUE, FALSE), .after = is_weekend)
-glimpse(bikes_2)
-
 ```
 
 
@@ -152,15 +147,14 @@ It's reasonable to examine if ridership changes on holidays vs. non-holidays.  W
 read in an excel sheet containing holiday data and join this with the main data frame.
 Finally, we write the transformed data frame into the `data` folder as `bikes_1.csv`
 
-```{r}
+```{r, chache = TRUE}
 library(readxl)
 hdays <- read_excel(here("data", "holidays.xlsx"))
 glimpse(hdays)
 ```
 
 
-
-```{r holidays, message = FALSE}
+```{r holidays, message = FALSE, cache = TURE}
 bikes_3 <- bikes_2 %>% 
   left_join(hdays, by = "date") %>% 
   mutate(is_holiday = ifelse(!is.na(holiday), "yes", "no")) %>% 
@@ -168,7 +162,7 @@ bikes_3 <- bikes_2 %>%
 glimpse(bikes_3)
 ```
 
-```{r}
+```{r, cache=TRUE}
 bikes_3 %>%  write_csv(here("data", "bikes_1.csv"))
 ```
 

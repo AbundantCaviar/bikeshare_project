@@ -1,0 +1,180 @@
+---
+title: "EDA With Temporal Variables"
+author: "Doug Antibus"
+date: "2023-12-28"
+output: 
+  html_document:
+    toc: true
+    number_sections: false
+    theme:
+      version: 5
+      bootswatch: pulse
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+source("00_libraries.r")
+```
+
+
+## EDA of ridership over time
+
+This section focuses on using temporal variables to find differences between members
+and casual riders.
+
+Read in the most recent data file, `bikes_2.csv`, and omit rows containing NA values.
+ 
+```{r, cache = TRUE}
+bikes <- read_csv(here("data", "bikes_2.csv")) %>% na.omit()
+```
+
+### Data preparation
+
+We start by changing the `dow` (day of week) and `month_abb` (abbreviated month) variables into ordered factors.  For `dow` we define the week as starting Monday and ending Sunday, because we want to see weekend days adjacent to each other on plots.
+
+```{r}
+day_order <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+month_order <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+bikes <- bikes %>% 
+  mutate(dow = factor(dow, ordered = TRUE, levels = day_order), 
+         month_abb = factor(month_abb, ordered = TRUE, levels = month_order))
+```
+
+Next, we summarize ride counts by `date` and `member_casual`.  In addition to 
+date and rider type, we include other variables such as `month` and `is_weekend`
+taking these "along for the ride", as these will be useful in plotting
+
+```{r, cache = TRUE}
+daily_counts <- bikes %>% 
+  group_by(date, month, month_abb, dow, is_weekend, member_casual, is_holiday) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+glimpse(daily_counts)
+```
+
+Next we create a "wide" data frame of daily counts, placing member and casual 
+counts in separate columns.  We also calculate a `total` column and the percentage 
+of member and casual trips for each date.
+
+```{r}
+daily_counts_w <- daily_counts %>% 
+  pivot_wider(names_from = member_casual, values_from = n) %>% 
+  mutate(total = member + casual, 
+         member_pct = 100 * member / total, 
+         casual_pct = 100 * casual / total) 
+```
+
+### Plotting trip heatmaps
+
+We make a heatmap of casual trips by month and day of week.  It seems that
+casual ridership is highest on Saturdays and Sundays from May - September.  Saturdays in June show the highest activity.
+
+```{r}
+daily_counts_w %>%  
+  group_by(month, month_abb, dow) %>% 
+  summarize(casual = sum(casual),
+            n = n(),
+            mean_casual = casual/ n) %>%    #View()
+  ggplot(aes(dow, month_abb, fill = mean_casual)) +
+  geom_raster() +
+  scale_fill_viridis_c(limits = c(0, 14000)) +
+  theme_minimal() +
+  labs(fill = "Mean number of \n casual trips",
+       title = "Casual riders prefer summer weekends",
+       x = NULL, y = NULL) +
+  theme(plot.title = element_text(color = "dodgerblue"))
+```
+
+Now we make the same type of heatmap for members.  In contrast to casual riders, 
+members take the most trips on weekdays.  
+
+Like casual riders, members take more trips from May - September and trips decline
+from November - March.  However the dropoff in activity seems to be less drastic
+than we see with casual riders.
+
+```{r, echo = FALSE}
+daily_counts_w %>%  
+  group_by(month, month_abb, dow) %>% 
+  summarize(member = sum(member),
+            n = n(),
+            mean_member = member/ n) %>%   #View()
+  ggplot(aes(dow, month_abb, fill = mean_member)) +
+  geom_tile() +
+  scale_fill_viridis_c(limits = c(0, 14000)) +
+  theme_minimal() +
+  labs(fill = "Mean number of \n member trips",
+       title = "Members are most active on weekdays",
+       x = NULL, y= NULL) +
+  theme(plot.title = element_text(color = "dodgerblue"))
+```
+
+### Examining ridership by day and hour of day
+
+Next, we want to understand if member and casual ridership differ by hour of the 
+day.  To do this, we will create barplots of mean trips by hour, faceted by day
+of the week.
+
+To start, we need to create a data frame of hourly ridership counts, based on  
+the time each trip started.
+
+
+```{r, cache = TRUE}
+hourly_counts <- bikes %>% 
+  group_by(month, month_abb, dow, hod, member_casual) %>% 
+  summarize(n  = n()) %>% 
+  mutate(hod_fct = factor(hod), .after = hod) %>% 
+  ungroup()
+
+glimpse(hourly_counts)
+```
+The code to plot casual trips is shown below.  The code to plot member trips is 
+almost identical.  
+
+Members and casual riders show different patterns of starting trips.  Casual 
+riders show more overall activity on weekends than weekdays.  Weekend activity
+has a broad peak from the late morning to late afternoon.  Weekday activity
+peaks around 5 pm.
+
+Member activity is bimodal on weekdays.  We see peaks around 7-8 am and again 
+around 5 pm.  This would be consistent with members using trips to commute to and from work or school.  We also see that member activity is higher on weekdays than weekends.
+
+
+```{r}
+hourly_counts %>% 
+  filter(member_casual == "casual") %>% 
+  ggplot(aes(hod, n)) +
+  geom_bar(stat = "summary", fun = "mean", fill = "dodgerblue") +
+  theme_minimal() +
+  facet_wrap(~ dow, nrow = 4) +
+  labs(title = "Casuals are most active on weekend afternoons",
+       y = "Mean hourly ridership",
+       x = "Hour of the day") +
+  scale_y_continuous(n.breaks = 3) +
+  theme(plot.title = element_text(color = "dodgerblue"))
+
+```
+
+
+```{r, echo = FALSE}
+hourly_counts %>% 
+  filter(member_casual == "member") %>% 
+  ggplot(aes(hod, n)) +
+  geom_bar(stat = "summary", fun = "mean", fill = "dodgerblue") +
+  theme_minimal() +
+  facet_wrap(~ dow, nrow = 4) +
+  labs(title = "Member activity is bimodal",
+       y = "Mean hourly ridership", 
+       x = "Hour of the day") +
+  scale_y_continuous(n.breaks = 3) +
+  theme(plot.title = element_text(color = "dodgerblue"))
+
+```
+
+
+
+
+

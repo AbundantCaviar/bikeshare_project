@@ -16,7 +16,7 @@ combined_data_raw <- bind_rows(files_list, .id = NULL)
 
 # glimpse(combined_data_raw)  # 5.65M rows, 13 cols
 
-object.size(combined_data_raw) %>% print(units = "Mb", standard = "legacy") # 992.4 Mb
+# object.size(combined_data_raw) %>% print(units = "Mb", standard = "legacy") # 992.4 Mb
 
 
 # remove the list as it is about 1 GB
