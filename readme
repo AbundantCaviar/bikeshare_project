@@ -7,11 +7,11 @@ For my capstone project I elected to analyze bikeshare data from a fictional
 company offering bike rentals in Chicago, IL.  
 
 All of the steps of data analysis were done in R and are reported in RMarkdown
-files (output as HTML).  
+files (output as .html).  
 
-The HTML files should be able to be opened in any browser.  
+The .html files should be able to be opened in any browser after downloading.
 
-Unfortunately the .Rmd files cannot be knit to HTML without external data, as most 
+Unfortunately the .Rmd files cannot be knit to .html without external data, as most 
 of the data files were too large to upload to Github.  If someone starts 
 from file download, the entire workflow should be followable.  Some data and 
 images representing intermediate steps of the analysis process are also included 
